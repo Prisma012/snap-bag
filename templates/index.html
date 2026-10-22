@@ -319,20 +319,8 @@
         }
 
         .style-dialog-layout {
-            width: 100%;
-            display: grid;
-            grid-template-columns: minmax(0, 420px) 0;
-            align-items: center;
-            justify-content: center;
-            column-gap: 0;
-            transition:
-                grid-template-columns 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-                column-gap 0.42s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-
-        .style-dialog-layout.frame-colors-visible {
-            grid-template-columns: minmax(0, 420px) 360px;
-            column-gap: 16px;
+            width: min(100%, 920px);
+            margin: auto;
         }
 
         #styleModal [hidden] {
@@ -342,21 +330,12 @@
         .style-content {
             background: var(--surface);
             border: 1px solid var(--border);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
             border-radius: 24px;
             padding: 40px 32px;
             width: 100%;
-            flex: 0 1 420px;
             min-width: 0;
-            max-width: 380px;
+            max-width: 920px;
             animation: modalEnter 0.4s cubic-bezier(0.22, 1, 0.36, 1);
-            transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
-            will-change: transform;
-        }
-
-        .style-dialog-layout.frame-colors-visible .style-content {
-            transform: translateY(-4px) scale(0.995);
         }
 
         .style-content h3 {
@@ -365,6 +344,36 @@
             font-size: 20px;
             font-weight: 600;
         }
+
+        .style-options-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+            grid-template-areas: "primary secondary" "colors colors";
+            align-items: stretch;
+            gap: 14px 20px;
+        }
+
+        .style-primary-controls,
+        .style-secondary-controls {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            gap: 16px;
+        }
+        .style-primary-controls { grid-area: primary; }
+        .style-secondary-controls { grid-area: secondary; justify-content: space-between; }
+        .style-select-field { grid-area: style; }
+        .gender-select-field { grid-area: gender; }
+        #denoisingOption { grid-area: denoising; }
+        #adetailerOption { grid-area: adetailer; }
+        .style-frame-controls { grid-area: frame; display: grid; gap: 12px; }
+        #frameColorPanel { grid-area: colors; }
+        .style-options-grid .select-wrapper,
+        .style-options-grid .select-wrapper:last-of-type,
+        .style-options-grid .frame-option { margin-bottom: 0; min-width: 0; }
+        .style-options-grid .frame-option { padding: 12px 14px; }
+        .style-options-grid #denoisingOption { gap: 4px; }
+        .style-options-body > #transformBtn { margin-top: 20px; }
 
         /* Select */
         .select-wrapper {
@@ -387,7 +396,7 @@
             font-weight: 500;
             appearance: none;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
 
         select:hover {
@@ -481,8 +490,7 @@
             transition: background 0.2s ease, border-color 0.2s ease;
         }
 
-        .frame-toggle-track::after {
-            content: '';
+        .frame-toggle-thumb {
             position: absolute;
             top: 3px;
             left: 3px;
@@ -499,7 +507,7 @@
             background: var(--primary);
         }
 
-        .frame-toggle input:checked + .frame-toggle-track::after {
+        .frame-toggle input:checked + .frame-toggle-track .frame-toggle-thumb {
             transform: translateX(22px);
         }
 
@@ -513,53 +521,30 @@
             opacity: 0.55;
         }
 
-        .frame-color-panel {
-            display: block;
-            width: 100%;
-            max-width: 360px;
-            min-width: 0;
-            min-height: 0;
-            overflow: hidden;
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-            transform: translateX(-22px) scale(0.96);
-            transform-origin: left center;
-            transition:
-                opacity 0.24s ease,
-                transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-                visibility 0s linear 0.42s;
-            will-change: opacity, transform;
-        }
+        .frame-color-panel { min-width: 0; }
 
         .frame-color-panel-inner {
-            width: 100%;
-            max-height: min(82vh, 700px);
-            padding: 24px 20px;
-            overflow-x: hidden;
-            overflow-y: auto;
+            display: grid;
+            grid-template-columns: 100px minmax(0, 1fr);
+            align-items: center;
+            gap: 14px;
+            padding: 14px;
             border: 1px solid var(--border);
-            border-radius: 22px;
+            border-radius: 14px;
             background: var(--surface);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
         }
 
-        .frame-color-panel.is-visible {
-            opacity: 1;
-            visibility: visible;
-            pointer-events: auto;
-            transform: translateX(0) scale(1);
-            transition-delay: 0s;
-        }
+        .frame-color-settings { min-width: 0; }
+        .frame-color-select-label { display: block; margin-bottom: 6px; color: var(--text-muted); font-size: 11px; }
+        #frameColorSelect { min-height: 46px; padding-left: 12px; font-size: 12px; }
 
         .frame-color-header {
-            margin-bottom: 14px;
+            margin-bottom: 10px;
         }
 
         .frame-color-header h4 {
             margin-bottom: 5px;
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 800;
             letter-spacing: -0.025em;
         }
@@ -573,8 +558,8 @@
         .frame-preview-stage {
             display: grid;
             place-items: center;
-            min-height: 176px;
-            margin-bottom: 18px;
+            min-height: 116px;
+            margin-bottom: 0;
             border: 1px solid var(--border);
             border-radius: 16px;
             background-color: #e9e4dc;
@@ -591,8 +576,8 @@
             --frame-a: #ffffff;
             --frame-b: #ffffff;
             --frame-text: #282828;
-            width: 112px;
-            padding: 8px;
+            width: 88px;
+            padding: 6px;
             overflow: hidden;
             border: 0;
             border-radius: 3px;
@@ -604,7 +589,7 @@
         .frame-preview-photo {
             display: block;
             width: 100%;
-            height: 54px;
+            height: 36px;
             background-color: #d8d3cc;
             background-position: center;
             background-size: cover;
@@ -643,116 +628,6 @@
             font-size: 5px;
             letter-spacing: 0.01em;
             white-space: nowrap;
-        }
-
-        .frame-color-section + .frame-color-section {
-            margin-top: 16px;
-        }
-
-        .frame-color-section-title {
-            margin-bottom: 8px;
-            color: var(--text-muted);
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 0.08em;
-        }
-
-        .frame-color-options {
-            display: grid;
-            gap: 7px;
-        }
-
-        .frame-color-choice {
-            position: relative;
-            display: block;
-            cursor: pointer;
-        }
-
-        .frame-color-choice input {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            opacity: 0;
-        }
-
-        .frame-color-card {
-            display: grid;
-            grid-template-columns: 34px minmax(0, 1fr);
-            gap: 10px;
-            align-items: center;
-            padding: 9px 30px 9px 9px;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.06);
-            transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
-        }
-
-        .frame-color-card::after {
-            content: "";
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            width: 8px;
-            height: 8px;
-            border: 2px solid var(--border-focus);
-            border-radius: 50%;
-            transform: translateY(-50%);
-        }
-
-        .frame-color-choice:hover .frame-color-card {
-            border-color: var(--border-focus);
-            transform: translateY(-1px);
-        }
-
-        .frame-color-choice input:checked + .frame-color-card {
-            border-color: var(--primary);
-            background: var(--primary-soft);
-        }
-
-        .frame-color-choice input:checked + .frame-color-card::after {
-            border-color: var(--primary);
-            background: var(--primary);
-            box-shadow: inset 0 0 0 2px #fff;
-        }
-
-        .frame-color-choice input:focus-visible + .frame-color-card {
-            outline: 3px solid var(--primary-soft);
-            outline-offset: 2px;
-        }
-
-        .frame-color-choice input:disabled + .frame-color-card {
-            cursor: not-allowed;
-            opacity: 0.55;
-        }
-
-        .frame-color-swatch {
-            width: 34px;
-            height: 34px;
-            border: 0;
-            border-radius: 10px;
-            background: linear-gradient(135deg, var(--swatch-a) 0 50%, var(--swatch-b) 50% 100%);
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
-        }
-
-        .frame-color-copy {
-            min-width: 0;
-        }
-
-        .frame-color-copy strong,
-        .frame-color-copy small {
-            display: block;
-        }
-
-        .frame-color-copy strong {
-            margin-bottom: 2px;
-            font-size: 12px;
-            font-weight: 800;
-        }
-
-        .frame-color-copy small {
-            color: var(--text-muted);
-            font-size: 10px;
-            line-height: 1.4;
         }
 
         /* Loading state */
@@ -1109,8 +984,8 @@
         }
 
         .style-content {
-            max-width: 420px;
-            padding: 34px 30px 30px;
+            max-width: 920px;
+            padding: 24px;
             border: 1px solid rgba(255, 255, 255, 0.76);
             border-radius: 28px;
             background: rgba(255, 252, 246, 0.98);
@@ -1145,6 +1020,30 @@
             background: #ebe5dc;
         }
 
+        select:focus {
+            border-color: var(--primary);
+            background: #ebe5dc;
+        }
+
+        .container[data-camera-state="loading"] {
+            visibility: hidden;
+            pointer-events: none;
+            animation: none;
+        }
+
+        .camera-initial-status {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: calc(100% - 48px);
+            max-width: 420px;
+            transform: translate(-50%, -50%);
+            color: #f8fafc;
+            text-align: center;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
         option {
             background: #fffaf3;
             color: var(--text);
@@ -1152,6 +1051,74 @@
 
         .frame-option {
             background: #f3eee7;
+        }
+
+        #adetailerOption {
+            border-color: #dc6b62;
+            border-left: 4px solid #b91c1c;
+            background: #f6b8b1;
+        }
+
+        #adetailerOption .frame-option-copy strong,
+        #adetailerOption .frame-option-copy span {
+            color: #7f1d1d;
+        }
+
+        .adetailer-confirm-dialog {
+            width: min(420px, calc(100% - 32px));
+            margin: auto;
+            padding: 28px;
+            border: 1px solid #f87171;
+            border-radius: 24px;
+            background: #b91c1c;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.38);
+            color: #fff7f5;
+            font-family: inherit;
+        }
+
+        .adetailer-confirm-dialog::backdrop {
+            background: rgba(17, 14, 22, 0.60);
+        }
+
+        .adetailer-confirm-dialog h3 {
+            margin-bottom: 16px;
+            text-align: center;
+            font-size: 22px;
+            font-weight: 800;
+        }
+
+        .adetailer-confirm-dialog p {
+            margin-bottom: 24px;
+            font-size: 14px;
+            line-height: 1.7;
+            word-break: keep-all;
+        }
+
+        .adetailer-confirm-dialog .btn {
+            border: 1px solid #fca5a5;
+            background: #7f1d1d;
+            color: #fff7f5;
+            box-shadow: none;
+        }
+
+        .adetailer-confirm-dialog .btn:hover:not(:disabled) {
+            background: #6b1717;
+            box-shadow: none;
+        }
+
+        .adetailer-confirm-dialog .btn-secondary {
+            border-color: #ffe4e6;
+            background: #fff1f2;
+            color: #881337;
+        }
+
+        .adetailer-confirm-dialog .btn-secondary:hover:not(:disabled) {
+            background: #ffe4e6;
+        }
+
+        .adetailer-confirm-dialog .btn:focus-visible {
+            outline: 3px solid #fde68a;
+            outline-offset: 3px;
         }
 
         .frame-color-card {
@@ -1269,51 +1236,48 @@
             color: #ffecef;
         }
 
-        @media (max-width: 860px) {
-            #styleModal {
-                align-items: flex-start;
-                padding: 12px;
+        @media (min-width: 721px) {
+            .style-dialog-layout.is-single-column { width: min(100%, 480px); }
+            .is-single-column .style-options-grid {
+                grid-template-columns: minmax(0, 1fr);
+                grid-template-areas: "primary";
             }
-
-            .style-dialog-layout {
-                grid-template-columns: minmax(0, 420px);
-                grid-template-rows: auto 0fr;
-                justify-content: flex-start;
-                justify-items: center;
-                row-gap: 0;
-                padding: 12px 0;
-                transition:
-                    grid-template-rows 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-                    row-gap 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+            .is-frame-side .style-options-grid {
+                grid-template-areas: "primary colors";
             }
-
-            .style-dialog-layout.frame-colors-visible {
-                grid-template-columns: minmax(0, 420px);
-                grid-template-rows: auto 1fr;
-                column-gap: 0;
-                row-gap: 16px;
-            }
-
-            .style-content,
-            .frame-color-panel {
-                flex: none;
-                width: min(100%, 420px);
-                max-width: 420px;
-            }
-
-            .frame-color-panel {
+            .is-frame-side .frame-color-panel-inner {
                 height: 100%;
-                max-width: 420px;
-                transform: translateY(-18px) scale(0.98);
-                transform-origin: top center;
+                grid-template-columns: minmax(120px, 0.85fr) minmax(0, 1fr);
+                gap: 16px;
+                padding: 16px;
             }
-
-            .frame-color-panel.is-visible {
-                transform: translateY(0) scale(1);
-            }
-
+            .is-frame-side .frame-preview-stage { min-height: 140px; }
+            .is-frame-side .frame-preview-sheet { width: min(100%, 156px); }
+            .is-frame-side .frame-color-header h4 { font-size: 16px; }
             .frame-color-panel-inner {
-                max-height: none;
+                grid-template-columns: 200px minmax(0, 1fr);
+                gap: 28px;
+                padding: 20px;
+                box-shadow: 0 14px 30px rgba(35, 31, 40, 0.12);
+            }
+            .frame-preview-stage { min-height: 140px; }
+            .frame-preview-sheet { width: 176px; padding: 10px; }
+            .frame-preview-photo { height: 72px; }
+            .frame-preview-sheet:not(.is-single-photo) .frame-preview-photo { height: 48px; }
+            .frame-color-header h4 { font-size: 18px; }
+            .frame-color-header p,
+            .frame-color-select-label { font-size: 12px; }
+            #frameColorSelect { min-height: 54px; font-size: 14px; }
+        }
+
+        @media (max-width: 720px) {
+            #styleModal { align-items: flex-start; padding: 12px; }
+            .style-dialog-layout { max-width: 420px; }
+            .style-primary-controls,
+            .style-secondary-controls { display: contents; }
+            .style-options-grid {
+                grid-template-columns: minmax(0, 1fr);
+                grid-template-areas: "style" "gender" "denoising" "adetailer" "frame" "colors";
             }
         }
 
@@ -1355,8 +1319,8 @@
                 gap: 14px;
             }
 
-            .frame-color-panel {
-                width: calc(100% - 24px);
+            .style-content {
+                width: 100%;
             }
 
             .frame-color-panel-inner {
@@ -1379,6 +1343,7 @@
         }
 
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='pocket-motion.css') }}">
 </head>
 <body>
 
@@ -1389,7 +1354,9 @@
     <span id="coinBalanceText">입력된 코인 개수: 0개</span>
 </div>
 
-<div class="container">
+<p id="cameraInitialStatus" class="camera-initial-status" role="status">카메라를 준비하고 있습니다.</p>
+
+<div class="container" data-camera-state="loading">
     <div class="logo-section">
         <div class="logo-mark">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1445,178 +1412,156 @@
 </div>
 
 <div id="styleModal" class="modal-overlay">
-    <div class="style-dialog-layout">
+    <div class="style-dialog-layout is-single-column">
         <div class="style-content">
             <h3>스타일 · 성별 · 프레임 선택</h3>
-
-            <div class="select-wrapper">
-                <select id="styleSelect" onchange="checkSelections()">
-                    <option value="" selected disabled>적용할 스타일을 선택하세요</option>
-                    <option value="none">[원본 반환] 변환하지 않기</option>
-                    <option value="convex_mirror_filter">[필터] 볼록거울</option>
-                    <option value="concave_mirror_filter">[필터] 오목거울</option>
-                    <option value="color_inversion_filter">[필터] 색 반전</option>
-                    <option value="mosaic_filter">[필터] 모자이크</option>
-                    <option value="canny_filter">[필터] 윤곽선</option>
-                    <option value="anime" data-adetailer-supported="true">[스타일] 애니메이션</option>
-                    <option value="watercolor" data-adetailer-supported="true">[스타일] 수채화</option>
-                    <option value="comic" data-adetailer-supported="true">[스타일] 코믹북</option>
-                </select>
-            </div>
-
-            <div class="select-wrapper">
-                <select id="genderSelect" onchange="checkSelections()">
-                    <option value="" selected disabled>성별 또는 인원을 선택하세요</option>
-                    <option value="male">남자 (Male)</option>
-                    <option value="female">여자 (Female)</option>
-                    <option value="mixed">혼성 (Mixed / Couple)</option>
-                </select>
-            </div>
-
-            <div class="frame-option">
-                <div class="frame-option-copy">
-                    <strong>프레임 추가</strong>
-                    <span id="frameOptionDescription" data-collage-text="변환 전후 사진에 프레임을 추가합니다.">변환 전후 사진에 프레임을 추가합니다.</span>
+            <div class="style-options-body">
+                <div class="style-options-grid">
+                    <div class="style-primary-controls">
+                        <div class="select-wrapper style-select-field">
+                            <select id="styleSelect" onchange="checkSelections()">
+                                <option value="" selected disabled>적용할 스타일을 선택하세요</option>
+                                <option value="none">[원본 반환] 변환하지 않기</option>
+                                <option value="convex_mirror_filter">[필터] 볼록거울</option>
+                                <option value="concave_mirror_filter">[필터] 오목거울</option>
+                                <option value="color_inversion_filter">[필터] 색 반전</option>
+                                <option value="mosaic_filter">[필터] 얼굴 모자이크</option>
+                                <option value="canny_filter">[필터] 윤곽선</option>
+                                <option value="anime" data-stable-diffusion="{{ 'true' if 'anime' in stable_diffusion_styles|default(['anime', 'watercolor', 'comic']) else 'false' }}" data-adetailer-supported="true">[스타일] 애니메이션</option>
+                                <option value="watercolor" data-stable-diffusion="{{ 'true' if 'watercolor' in stable_diffusion_styles|default(['anime', 'watercolor', 'comic']) else 'false' }}" data-adetailer-supported="true">[스타일] 수채화</option>
+                                <option value="comic" data-stable-diffusion="{{ 'true' if 'comic' in stable_diffusion_styles|default(['anime', 'watercolor', 'comic']) else 'false' }}" data-adetailer-supported="true">[스타일] 코믹북</option>
+                            </select>
+                        </div>
+                        <div class="select-wrapper gender-select-field">
+                            <select id="genderSelect" onchange="checkSelections()">
+                                <option value="" selected disabled>성별 또는 인원을 선택하세요</option>
+                                <option value="male">남자 (Male)</option>
+                                <option value="female">여자 (Female)</option>
+                                <option value="mixed">혼성 (Mixed / Couple)</option>
+                            </select>
+                        </div>
+                        <div class="style-frame-controls">
+                            <div id="frameOption" class="frame-option">
+                                <div class="frame-option-copy">
+                                    <strong>프레임 추가</strong>
+                                    <span id="frameOptionDescription" data-collage-text="변환 전후 사진에 프레임을 추가합니다.">변환 전후 사진에 프레임을 추가합니다.</span>
+                                </div>
+                                <label class="frame-toggle">
+                                    <input id="frameCheckbox" type="checkbox" aria-label="프레임 추가">
+                                    <span class="frame-toggle-track" aria-hidden="true"><span class="frame-toggle-thumb"></span></span>
+                                </label>
+                            </div>
+                            <div id="resultOnlyOption" class="frame-option" hidden>
+                                <div class="frame-option-copy">
+                                    <strong>결과물만 출력</strong>
+                                    <span id="resultOnlyOptionDescription"
+                                          data-enabled-text="원본은 제외하고 변환 결과 한 장에만 프레임을 적용합니다."
+                                          data-frame-required-text="프레임 추가를 켜면 선택할 수 있습니다."
+                                          data-unavailable-text="원본 반환은 이미 사진 한 장만 출력됩니다."
+                                          data-select-text="스타일을 선택하고 프레임 추가를 켜면 사용할 수 있습니다.">스타일을 선택하고 프레임 추가를 켜면 사용할 수 있습니다.</span>
+                                </div>
+                                <label class="frame-toggle">
+                                    <input id="resultOnlyCheckbox" type="checkbox" aria-label="결과물만 출력" aria-describedby="resultOnlyOptionDescription" disabled>
+                                    <span class="frame-toggle-track" aria-hidden="true"><span class="frame-toggle-thumb"></span></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="style-secondary-controls" hidden>
+                        <div id="denoisingOption" class="frame-option denoising-option" hidden>
+                            <div class="frame-option-copy">
+                                <strong id="denoisingTitle">변형도</strong>
+                                <span id="denoisingDescription">높을수록 원본에서 더 크게 변형됩니다.</span>
+                            </div>
+                            <div id="denoisingSlider" class="denoising-slider" style="--denoising-position: 33.333333%">
+                                <div class="denoising-rail" aria-hidden="true">
+                                    <span class="denoising-fill"></span>
+                                    <span class="denoising-stop" style="left: 0%"></span>
+                                    <span class="denoising-stop" style="left: 33.333333%"></span>
+                                    <span class="denoising-stop" style="left: 66.666667%"></span>
+                                    <span class="denoising-stop" style="left: 100%"></span>
+                                    <span class="denoising-thumb"></span>
+                                </div>
+                                <input id="denoisingRange" type="range" min="0" max="3" step="1" value="1"
+                                       aria-labelledby="denoisingTitle" aria-describedby="denoisingDescription" aria-valuetext="기본" disabled>
+                                <div class="denoising-labels" aria-label="변형도 단계">
+                                    <button type="button" data-denoising-index="0" aria-pressed="false" disabled>낮음</button>
+                                    <button type="button" data-denoising-index="1" aria-pressed="true" disabled>기본</button>
+                                    <button type="button" data-denoising-index="2" aria-pressed="false" disabled>높음</button>
+                                    <button type="button" data-denoising-index="3" aria-pressed="false" disabled>울트라</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="adetailerOption" class="frame-option" hidden>
+                            <div class="frame-option-copy">
+                                <strong>ADetailer 얼굴 보정</strong>
+                                <span id="adetailerOptionDescription"
+                                      data-enabled-text="얼굴 디테일을 과도하게 보정합니다. 원본과 크게 달라질 수 있으며, 소요 시간이 더 오래 걸립니다."
+                                      data-unavailable-text="원본 반환과 필터는 Stable Diffusion을 사용하지 않아 적용할 수 없습니다."
+                                      data-select-text="Stable Diffusion 스타일을 선택하면 사용할 수 있습니다.">Stable Diffusion 스타일을 선택하면 사용할 수 있습니다.</span>
+                            </div>
+                            <label class="frame-toggle">
+                                <input id="adetailerCheckbox" type="checkbox" aria-label="ADetailer 얼굴 보정" aria-describedby="adetailerOptionDescription" disabled>
+                                <span class="frame-toggle-track" aria-hidden="true"><span class="frame-toggle-thumb"></span></span>
+                            </label>
+                        </div>
+                    </div>
+                    <aside id="frameColorPanel" class="frame-color-panel" hidden aria-hidden="true" aria-labelledby="frameColorTitle">
+                        <div class="frame-color-panel-inner">
+                            <div class="frame-preview-stage" aria-hidden="true">
+                                <div id="framePreviewSheet" class="frame-preview-sheet">
+                                    <div id="framePreviewOriginal" class="frame-preview-photo"></div>
+                                    <div id="framePreviewTransformed" class="frame-preview-photo"></div>
+                                    <span class="{% if watermark_text|length > 16 %}is-long{% endif %}">{{ watermark_text }}</span>
+                                </div>
+                            </div>
+                            <div class="frame-color-settings">
+                                <div class="frame-color-header">
+                                    <h4 id="frameColorTitle">프레임 미리보기 · 설정</h4>
+                                    <p id="frameColorDescription">색상을 선택하면 미리보기에 바로 반영됩니다.</p>
+                                </div>
+                                <label for="frameColorSelect" class="frame-color-select-label">프레임 색상</label>
+                                <div class="select-wrapper">
+                                    <select id="frameColorSelect" aria-describedby="frameColorDescription" disabled>
+                                <optgroup label="단일 색상">
+                                    <option value="clear_white">클리어 화이트</option>
+                                    <option value="matte_black">매트 블랙</option>
+                                    <option value="cybernetic_blue">사이버네틱 블루</option>
+                                    <option value="metal_purple">메탈 퍼플</option>
+                                    <option value="liquid_glass">리퀴드 글라스</option>
+                                </optgroup>
+                                <optgroup label="투톤">
+                                    <option value="black_white">블랙 &amp; 화이트</option>
+                                    <option value="cobalt_cream">코발트 &amp; 크림</option>
+                                    <option value="burgundy_blush">버건디 &amp; 블러시</option>
+                                    <option value="forest_sand">포레스트 &amp; 샌드</option>
+                                    <option value="orange_navy">오렌지 &amp; 네이비</option>
+                                </optgroup>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
                 </div>
-                <label class="frame-toggle">
-                    <input id="frameCheckbox" type="checkbox" aria-label="프레임 추가">
-                    <span class="frame-toggle-track" aria-hidden="true"></span>
-                </label>
+                <button id="transformBtn" class="btn" onclick="startTransform()" disabled>이미지 변환</button>
             </div>
-
-            <div id="resultOnlyOption" class="frame-option" hidden>
-                <div class="frame-option-copy">
-                    <strong>결과물만 출력</strong>
-                    <span id="resultOnlyOptionDescription"
-                          data-enabled-text="원본은 제외하고 변환 결과 한 장에만 프레임을 적용합니다."
-                          data-frame-required-text="프레임 추가를 켜면 선택할 수 있습니다."
-                          data-unavailable-text="원본 반환은 이미 사진 한 장만 출력됩니다."
-                          data-select-text="스타일을 선택하고 프레임 추가를 켜면 사용할 수 있습니다.">스타일을 선택하고 프레임 추가를 켜면 사용할 수 있습니다.</span>
-                </div>
-                <label class="frame-toggle">
-                    <input id="resultOnlyCheckbox" type="checkbox" aria-label="결과물만 출력" aria-describedby="resultOnlyOptionDescription" disabled>
-                    <span class="frame-toggle-track" aria-hidden="true"></span>
-                </label>
-            </div>
-
-            <div id="adetailerOption" class="frame-option" hidden>
-                <div class="frame-option-copy">
-                    <strong>ADetailer 얼굴 보정</strong>
-                    <span id="adetailerOptionDescription"
-                          data-enabled-text="얼굴 디테일을 과도하게 보정합니다. 원본과 크게 달라질 수 있으며, 소요 시간이 더 오래 걸립니다."
-                          data-unavailable-text="원본 반환과 필터는 Stable Diffusion을 사용하지 않아 적용할 수 없습니다."
-                          data-select-text="Stable Diffusion 스타일을 선택하면 사용할 수 있습니다.">Stable Diffusion 스타일을 선택하면 사용할 수 있습니다.</span>
-                </div>
-                <label class="frame-toggle">
-                    <input id="adetailerCheckbox" type="checkbox" aria-label="ADetailer 얼굴 보정" aria-describedby="adetailerOptionDescription" disabled>
-                    <span class="frame-toggle-track" aria-hidden="true"></span>
-                </label>
-            </div>
-
-            <button id="transformBtn" class="btn" onclick="startTransform()" disabled>이미지 변환</button>
         </div>
-
-        <aside id="frameColorPanel" class="frame-color-panel" aria-hidden="true" aria-labelledby="frameColorTitle">
-            <div class="frame-color-panel-inner">
-                <div class="frame-color-header">
-                    <h4 id="frameColorTitle">프레임 색상 미리보기</h4>
-                    <p>색상을 고르면 실제 프레임에 적용될 조합을 바로 확인할 수 있습니다.</p>
-                </div>
-
-            <div class="frame-preview-stage" aria-hidden="true">
-                <div id="framePreviewSheet" class="frame-preview-sheet">
-                    <div id="framePreviewOriginal" class="frame-preview-photo"></div>
-                    <div id="framePreviewTransformed" class="frame-preview-photo"></div>
-                    <span class="{% if watermark_text|length > 16 %}is-long{% endif %}">{{ watermark_text }}</span>
-                </div>
-            </div>
-
-            <section class="frame-color-section" aria-labelledby="singleColorTitle">
-                <h5 id="singleColorTitle" class="frame-color-section-title">단일 색상</h5>
-                <div class="frame-color-options">
-                    <label class="frame-color-choice">
-                        <input type="radio" name="frameColor" value="clear_white" checked>
-                        <span class="frame-color-card">
-                            <span class="frame-color-swatch" style="--swatch-a: #ffffff; --swatch-b: #ffffff;"></span>
-                            <span class="frame-color-copy"><strong>클리어 화이트</strong><small>모든 사진에 무난한 색깔입니다.</small></span>
-                        </span>
-                    </label>
-                    <label class="frame-color-choice">
-                        <input type="radio" name="frameColor" value="matte_black">
-                        <span class="frame-color-card">
-                            <span class="frame-color-swatch" style="--swatch-a: #121215; --swatch-b: #121215;"></span>
-                            <span class="frame-color-copy"><strong>매트 블랙</strong><small>모든 사진에 무난한 색깔입니다.</small></span>
-                        </span>
-                    </label>
-                    <label class="frame-color-choice">
-                        <input type="radio" name="frameColor" value="cybernetic_blue">
-                        <span class="frame-color-card">
-                            <span class="frame-color-swatch" style="--swatch-a: #00c7d9; --swatch-b: #00c7d9;"></span>
-                            <span class="frame-color-copy"><strong>사이버네틱 블루</strong><small>선명한 블루가 네온·SF 분위기를 또렷하게 강조합니다.</small></span>
-                        </span>
-                    </label>
-                    <label class="frame-color-choice">
-                        <input type="radio" name="frameColor" value="metal_purple">
-                        <span class="frame-color-card">
-                            <span class="frame-color-swatch" style="--swatch-a: #654c9f; --swatch-b: #654c9f;"></span>
-                            <span class="frame-color-copy"><strong>메탈 퍼플</strong><small>차분한 금속빛 퍼플이 신비로운 깊이를 더합니다.</small></span>
-                        </span>
-                    </label>
-                    <label class="frame-color-choice">
-                        <input type="radio" name="frameColor" value="liquid_glass">
-                        <span class="frame-color-card">
-                            <span class="frame-color-swatch" style="--swatch-a: rgba(218, 235, 242, 0.76); --swatch-b: rgba(238, 248, 250, 0.58);"></span>
-                            <span class="frame-color-copy"><strong>리퀴드 글라스</strong><small>빛을 은은하게 투과하는 유리 질감으로 사진을 감쌉니다.</small></span>
-                        </span>
-                    </label>
-                </div>
-            </section>
-
-            <section class="frame-color-section" aria-labelledby="twoToneTitle">
-                <h5 id="twoToneTitle" class="frame-color-section-title">투톤</h5>
-                <div class="frame-color-options">
-                    <label class="frame-color-choice">
-                        <input type="radio" name="frameColor" value="black_white">
-                        <span class="frame-color-card">
-                            <span class="frame-color-swatch" style="--swatch-a: #121215; --swatch-b: #f8f7f4;"></span>
-                            <span class="frame-color-copy"><strong>블랙 &amp; 화이트</strong><small>군더더기 없는 대비로 사진의 윤곽을 또렷하게 잡습니다.</small></span>
-                        </span>
-                    </label>
-                    <label class="frame-color-choice">
-                        <input type="radio" name="frameColor" value="cobalt_cream">
-                        <span class="frame-color-card">
-                            <span class="frame-color-swatch" style="--swatch-a: #1f4ac2; --swatch-b: #f6ebd0;"></span>
-                            <span class="frame-color-copy"><strong>코발트 &amp; 크림</strong><small>차가운 블루와 부드러운 크림이 세련된 균형을 만듭니다.</small></span>
-                        </span>
-                    </label>
-                    <label class="frame-color-choice">
-                        <input type="radio" name="frameColor" value="burgundy_blush">
-                        <span class="frame-color-card">
-                            <span class="frame-color-swatch" style="--swatch-a: #651b35; --swatch-b: #f2cdd3;"></span>
-                            <span class="frame-color-copy"><strong>버건디 &amp; 블러시</strong><small>깊은 레드와 옅은 핑크가 인물에 감각적인 온기를 더합니다.</small></span>
-                        </span>
-                    </label>
-                    <label class="frame-color-choice">
-                        <input type="radio" name="frameColor" value="forest_sand">
-                        <span class="frame-color-card">
-                            <span class="frame-color-swatch" style="--swatch-a: #184a3a; --swatch-b: #ddc79e;"></span>
-                            <span class="frame-color-copy"><strong>포레스트 &amp; 샌드</strong><small>짙은 그린과 담백한 베이지가 차분한 존재감을 만듭니다.</small></span>
-                        </span>
-                    </label>
-                    <label class="frame-color-choice">
-                        <input type="radio" name="frameColor" value="orange_navy">
-                        <span class="frame-color-card">
-                            <span class="frame-color-swatch" style="--swatch-a: #f1692c; --swatch-b: #172340;"></span>
-                            <span class="frame-color-copy"><strong>오렌지 &amp; 네이비</strong><small>선명한 오렌지와 깊은 네이비가 역동적인 대비를 완성합니다.</small></span>
-                        </span>
-                    </label>
-                </div>
-            </section>
-            </div>
-        </aside>
     </div>
 </div>
 
+<dialog id="adetailerConfirmDialog" class="adetailer-confirm-dialog" role="alertdialog" aria-labelledby="adetailerConfirmTitle" aria-describedby="adetailerConfirmDescription">
+    <form method="dialog">
+        <h3 id="adetailerConfirmTitle">잠시만요!</h3>
+        <p id="adetailerConfirmDescription">Adetailer는 얼굴 디테일을 과도하게 보정합니다. 원본과 크게 달라질 수 있으며, 소요 시간이 더 오래 걸립니다. 계속 진행하시겠습니까?</p>
+        <div class="btn-group">
+            <button class="btn" type="submit" value="confirm">예</button>
+            <button class="btn btn-secondary" type="submit" value="cancel" autofocus>아니요</button>
+        </div>
+    </form>
+</dialog>
+
+<script src="{{ url_for('static', filename='vendor/animejs/anime.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='pocket-motion.js') }}"></script>
 <script>
 const video = document.getElementById("video");
 const videoContainer = document.querySelector(".video-container");
@@ -1732,7 +1677,7 @@ function notifyCoinUiChanged() {
 
 function hideCoinBalanceNotice() {
     const toast = document.getElementById("coinBalanceToast");
-    toast.classList.remove("is-visible");
+    pocketMotion.notice(toast, false);
     toast.setAttribute("aria-hidden", "true");
     coinNoticeTimer = null;
 
@@ -1752,10 +1697,8 @@ function showCoinBalanceNotice(message = "", tone = message ? "error" : "default
     toast.classList.toggle("has-error", tone === "error");
     toast.classList.toggle("is-remote-add", tone === "remote-add");
     toast.classList.toggle("is-remote-subtract", tone === "remote-subtract");
-    toast.classList.remove("is-visible");
     toast.setAttribute("aria-hidden", "false");
-    void toast.offsetWidth;
-    toast.classList.add("is-visible");
+    pocketMotion.notice(toast, true);
 
     if (coinNoticeTimer) clearTimeout(coinNoticeTimer);
     coinNoticeTimer = setTimeout(hideCoinBalanceNotice, COIN_NOTICE_DURATION_MS);
@@ -1971,7 +1914,7 @@ setInterval(() => void refreshCoinBalance(), COIN_BALANCE_POLL_INTERVAL_MS);
 void refreshCoinBalance();
 
 function getSelectedFrameColor() {
-    return document.querySelector('input[name="frameColor"]:checked')?.value || "clear_white";
+    return document.getElementById("frameColorSelect").value;
 }
 
 function updateContinueButton() {
@@ -2021,24 +1964,52 @@ function updateFramePreviewLayout() {
     else description.textContent = description.dataset.collageText;
 }
 
-function updateFrameColorVisibility() {
-    const isFrameEnabled = document.getElementById("frameCheckbox").checked;
-    const panel = document.getElementById("frameColorPanel");
-    const layout = document.querySelector(".style-dialog-layout");
-    layout.classList.toggle("frame-colors-visible", isFrameEnabled);
-    panel.classList.toggle("is-visible", isFrameEnabled);
-    panel.setAttribute("aria-hidden", String(!isFrameEnabled));
-    if (isFrameEnabled) updateFrameColorPreview();
+function hasStyleSelections() {
+    return Boolean(document.getElementById("styleSelect").value && document.getElementById("genderSelect").value);
 }
 
-document.getElementById("frameCheckbox").addEventListener("change", () => {
-    updateFrameColorVisibility();
-    updateResultOnlyAvailability();
+function updateStyleModalLayout() {
+    const ready = hasStyleSelections();
+    const usesSD = usesStableDiffusion();
+    const frameEnabled = document.getElementById("frameCheckbox").checked;
+    const layout = document.querySelector("#styleModal .style-dialog-layout");
+    layout.classList.toggle("is-single-column", !ready || (!usesSD && !frameEnabled));
+    layout.classList.toggle("is-frame-side", ready && !usesSD && frameEnabled);
+    document.querySelector("#styleModal .style-secondary-controls").hidden = !ready || !usesSD;
+}
+
+function updateFrameColorVisibility() {
+    const visible = document.getElementById("frameCheckbox").checked && hasStyleSelections();
+    pocketMotion.framePanel(visible, false);
+    document.getElementById("frameColorSelect").disabled = !visible || document.getElementById("styleSelect").disabled;
+    if (visible) updateFrameColorPreview();
+}
+
+document.getElementById("frameCheckbox").addEventListener("change", () => refreshStyleOptions());
+document.getElementById("resultOnlyCheckbox").addEventListener("change", () => refreshStyleOptions());
+const adetailerCheckbox = document.getElementById("adetailerCheckbox");
+const adetailerConfirmDialog = document.getElementById("adetailerConfirmDialog");
+adetailerCheckbox.addEventListener("change", () => {
+    if (!adetailerCheckbox.checked) return;
+    adetailerCheckbox.checked = false;
+    adetailerConfirmDialog.returnValue = "cancel";
+    pocketMotion.openConfirmation(adetailerConfirmDialog);
 });
-document.getElementById("resultOnlyCheckbox").addEventListener("change", updateFramePreviewLayout);
-document.querySelectorAll('input[name="frameColor"]').forEach(input => {
-    input.addEventListener("change", updateFrameColorPreview);
+adetailerConfirmDialog.addEventListener("submit", event => {
+    event.preventDefault();
+    pocketMotion.closeConfirmation(adetailerConfirmDialog, event.submitter?.value || "cancel");
 });
+adetailerConfirmDialog.addEventListener("cancel", event => {
+    event.preventDefault();
+    pocketMotion.closeConfirmation(adetailerConfirmDialog, "cancel");
+});
+adetailerConfirmDialog.addEventListener("close", () => {
+    if (adetailerConfirmDialog.returnValue === "confirm" && !adetailerCheckbox.disabled) {
+        adetailerCheckbox.checked = true;
+    }
+    pocketMotion.toggle(adetailerCheckbox);
+});
+document.getElementById("frameColorSelect").addEventListener("change", updateFrameColorPreview);
 
 function getCameraSourceDimensions() {
     const width = Math.floor(Number(video.videoWidth));
@@ -2083,6 +2054,14 @@ function setCameraReady(ready) {
     if (!captureFlowActive) captureButton.disabled = !cameraReady;
 }
 
+function finishCameraInitialization() {
+    const container = videoContainer.parentElement;
+    if (container.dataset.cameraState !== "loading") return;
+    container.dataset.cameraState = cameraReady ? "ready" : "unavailable";
+    document.getElementById("cameraInitialStatus").hidden = true;
+    pocketMotion.revealCamera(container);
+}
+
 function getPreviewAvailableWidth() {
     const parent = videoContainer.parentElement;
     if (!parent) return Math.max(1, window.innerWidth);
@@ -2104,9 +2083,9 @@ function getCameraFrameInsets() {
 
 function updateCameraPreviewLayout() {
     const source = getCameraSourceDimensions();
-    if (!source) return false;
+    const dimensions = source || { width: 16, height: 9 };
 
-    const aspectRatio = source.width / source.height;
+    const aspectRatio = dimensions.width / dimensions.height;
     const viewportHeight = window.visualViewport?.height || window.innerHeight;
     const maxPreviewHeight = Math.max(
         180,
@@ -2122,18 +2101,19 @@ function updateCameraPreviewLayout() {
     );
     videoContainer.style.setProperty(
         "--camera-aspect-ratio",
-        `${source.width} / ${source.height}`
+        `${dimensions.width} / ${dimensions.height}`
     );
     const containerWidth = Math.min(
         availableWidth,
         videoWidth + frameInsets.horizontal
     );
     videoContainer.style.width = `${Math.max(1, Math.floor(containerWidth))}px`;
-    return true;
+    return Boolean(source);
 }
 
 function handleCameraDimensionsChanged() {
     setCameraReady(updateCameraPreviewLayout());
+    if (cameraReady) finishCameraInitialization();
 }
 
 video.addEventListener("loadedmetadata", handleCameraDimensionsChanged);
@@ -2141,9 +2121,12 @@ video.addEventListener("resize", handleCameraDimensionsChanged);
 window.addEventListener("resize", updateCameraPreviewLayout);
 window.visualViewport?.addEventListener("resize", updateCameraPreviewLayout);
 
+updateCameraPreviewLayout();
+
 if (!navigator.mediaDevices?.getUserMedia) {
     console.error("Camera API is unavailable in this browser.");
     setCameraReady(false);
+    finishCameraInitialization();
 } else {
     navigator.mediaDevices.getUserMedia({
         video: {
@@ -2163,6 +2146,7 @@ if (!navigator.mediaDevices?.getUserMedia) {
     .catch(error => {
         console.error("Camera access failed", error);
         setCameraReady(false);
+        finishCameraInitialization();
     });
 }
 
@@ -2183,20 +2167,18 @@ function startCountdown() {
     const numberEl = document.getElementById("countdownNumber");
     let count = 3;
 
-    overlay.classList.add("active");
+    pocketMotion.countdown(overlay, true);
     
     function showNumber() {
         numberEl.textContent = count;
-        numberEl.style.animation = 'none';
-        numberEl.offsetHeight;
-        numberEl.style.animation = 'countdownPulse 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards';
+        pocketMotion.pulse(numberEl);
         
         if (count > 1) {
             count--;
             setTimeout(showNumber, 800);
         } else {
             setTimeout(() => {
-                overlay.classList.remove("active");
+                pocketMotion.countdown(overlay, false);
                 takePhoto();
             }, 800);
         }
@@ -2302,7 +2284,7 @@ function showPreviewModal(imageSrc) {
     updateContinueButton();
     updatePreviewCoinBalance();
     retakeBtn.disabled = false;
-    modal.style.display = "flex";
+    pocketMotion.showModal(modal);
     void refreshCoinBalance();
 }
 
@@ -2334,7 +2316,7 @@ function retakePhoto() {
     previewProceeding = false;
     uploadState = "idle";
     updateContinueButton();
-    document.getElementById("previewModal").style.display = "none";
+    pocketMotion.hideModal(document.getElementById("previewModal"));
     captureFlowActive = false;
     captureButton.disabled = !cameraReady;
     updateCoinQuickAddButton();
@@ -2359,35 +2341,81 @@ async function goToStyleSelect() {
         alert("사용 가능한 코인이 없습니다. 코인 입력 상태를 확인해주세요.");
         return;
     }
-    document.getElementById("previewModal").style.display = "none";
-    document.getElementById("styleModal").style.display = "flex";
-    setTransformOptionsDisabled(false);
+    pocketMotion.hideModal(document.getElementById("previewModal"), () => {
+        pocketMotion.showModal(document.getElementById("styleModal"));
+    });
     document.getElementById("styleSelect").value = "";
     document.getElementById("genderSelect").value = "";
+    setDenoisingIndex(1, false);
     document.getElementById("adetailerCheckbox").checked = false;
-    updateADetailerAvailability();
     document.getElementById("frameCheckbox").checked = false;
     document.getElementById("resultOnlyCheckbox").checked = false;
-    document.querySelector('input[name="frameColor"][value="clear_white"]').checked = true;
+    document.getElementById("frameColorSelect").value = "clear_white";
     const previewImage = capturedDataURL ? `url('${capturedDataURL}')` : "none";
     document.getElementById("framePreviewOriginal").style.backgroundImage = previewImage;
     document.getElementById("framePreviewTransformed").style.backgroundImage = previewImage;
-    updateResultOnlyAvailability();
     updateFrameColorPreview();
-    updateFrameColorVisibility();
+    setTransformOptionsDisabled(false);
     const transformBtn = document.getElementById("transformBtn");
     transformBtn.disabled = true;
+    pocketMotion.syncToggles(false);
+}
+
+function refreshStyleOptions(animate = true) {
+    const styleSelect = document.getElementById("styleSelect");
+    const ready = hasStyleSelections();
+    const frameVisible = ready && document.getElementById("frameCheckbox").checked;
+    const resultOnlyAvailable = frameVisible && styleSelect.value !== "none";
+    const singlePhoto = frameVisible && (styleSelect.value === "none"
+        || (resultOnlyAvailable && document.getElementById("resultOnlyCheckbox").checked));
+    const mode = !ready ? "single" : usesStableDiffusion() ? "sd" : frameVisible ? "frame" : "single";
+    const key = [mode, frameVisible, resultOnlyAvailable, singlePhoto].join(":");
+    const transformBtn = document.getElementById("transformBtn");
+    transformBtn.disabled = true;
+    pocketMotion.styleLayout(key, () => {
+        updateStyleModalLayout();
+        updateResultOnlyAvailability();
+        updateADetailerAvailability();
+        updateDenoisingAvailability();
+        updateFrameColorVisibility();
+        transformBtn.disabled = styleSelect.disabled || !hasStyleSelections();
+    }, animate);
 }
 
 function checkSelections() {
-    const styleValue = document.getElementById("styleSelect").value;
-    const genderValue = document.getElementById("genderSelect").value;
-    const transformBtn = document.getElementById("transformBtn");
-    updateResultOnlyAvailability();
-    updateADetailerAvailability();
-    const canTransform = Boolean(styleValue && genderValue);
-    transformBtn.disabled = !canTransform;
+    refreshStyleOptions();
 }
+
+const DENOISING_LEVELS = ["low", "default", "high", "ultra"];
+const DENOISING_LABELS = ["낮음", "기본", "높음", "울트라"];
+
+function usesStableDiffusion() {
+    return document.getElementById("styleSelect").selectedOptions[0]?.dataset.stableDiffusion === "true";
+}
+
+function setDenoisingIndex(index, animate = true) {
+    const range = document.getElementById("denoisingRange");
+    const selected = Math.max(0, Math.min(3, Math.round(Number(index))));
+    range.value = String(selected);
+    range.setAttribute("aria-valuetext", DENOISING_LABELS[selected]);
+    document.querySelectorAll("[data-denoising-index]").forEach(button => {
+        button.setAttribute("aria-pressed", String(Number(button.dataset.denoisingIndex) === selected));
+    });
+    pocketMotion.denoising(document.getElementById("denoisingSlider"), selected, animate);
+}
+
+function updateDenoisingAvailability() {
+    const supported = hasStyleSelections() && usesStableDiffusion();
+    const disabled = !supported || document.getElementById("styleSelect").disabled;
+    document.getElementById("denoisingRange").disabled = disabled;
+    document.querySelectorAll("[data-denoising-index]").forEach(button => { button.disabled = disabled; });
+    pocketMotion.option(document.getElementById("denoisingOption"), supported, false);
+}
+
+document.getElementById("denoisingRange").addEventListener("input", event => setDenoisingIndex(event.target.value));
+document.querySelectorAll("[data-denoising-index]").forEach(button => {
+    button.addEventListener("click", () => setDenoisingIndex(button.dataset.denoisingIndex));
+});
 
 function updateADetailerAvailability() {
     const styleSelect = document.getElementById("styleSelect");
@@ -2395,15 +2423,15 @@ function updateADetailerAvailability() {
     const description = document.getElementById("adetailerOptionDescription");
     const option = document.getElementById("adetailerOption");
     const selectedOption = styleSelect.selectedOptions[0];
-    const isSupported = selectedOption?.dataset.adetailerSupported === "true";
+    const isSupported = hasStyleSelections() && usesStableDiffusion() && selectedOption?.dataset.adetailerSupported === "true";
 
-    checkbox.disabled = !isSupported;
+    checkbox.disabled = !isSupported || styleSelect.disabled;
     if (!isSupported) checkbox.checked = false;
-    option.hidden = !isSupported;
-
     if (isSupported) description.textContent = description.dataset.enabledText;
     else if (styleSelect.value) description.textContent = description.dataset.unavailableText;
     else description.textContent = description.dataset.selectText;
+    pocketMotion.option(option, isSupported, false);
+    pocketMotion.toggle(checkbox);
 }
 
 function updateResultOnlyAvailability() {
@@ -2413,16 +2441,16 @@ function updateResultOnlyAvailability() {
     const description = document.getElementById("resultOnlyOptionDescription");
     const option = document.getElementById("resultOnlyOption");
     const isCollageOutput = Boolean(styleValue && styleValue !== "none");
-    const isAvailable = frameEnabled && isCollageOutput;
+    const isAvailable = hasStyleSelections() && frameEnabled && isCollageOutput;
 
-    checkbox.disabled = !isAvailable;
+    checkbox.disabled = !isAvailable || document.getElementById("styleSelect").disabled;
     if (!isAvailable) checkbox.checked = false;
-    option.hidden = !isAvailable;
-
     if (styleValue === "none") description.textContent = description.dataset.unavailableText;
     else if (!styleValue) description.textContent = description.dataset.selectText;
     else if (!frameEnabled) description.textContent = description.dataset.frameRequiredText;
     else description.textContent = description.dataset.enabledText;
+    pocketMotion.option(option, isAvailable, false);
+    pocketMotion.toggle(checkbox);
 
     updateFramePreviewLayout();
 }
@@ -2430,14 +2458,8 @@ function updateResultOnlyAvailability() {
 function setTransformOptionsDisabled(disabled) {
     document.getElementById("styleSelect").disabled = disabled;
     document.getElementById("genderSelect").disabled = disabled;
-    if (disabled) document.getElementById("adetailerCheckbox").disabled = true;
-    else updateADetailerAvailability();
     document.getElementById("frameCheckbox").disabled = disabled;
-    if (disabled) document.getElementById("resultOnlyCheckbox").disabled = true;
-    else updateResultOnlyAvailability();
-    document.querySelectorAll('input[name="frameColor"]').forEach(input => {
-        input.disabled = disabled;
-    });
+    refreshStyleOptions(false);
 }
 
 function sleep(ms) {
@@ -2490,6 +2512,7 @@ function setTransformButtonStatus(btn, message) {
         statusText = document.createElement("span");
         statusText.className = "transform-status";
         btn.replaceChildren(spinner, statusText);
+        pocketMotion.startSpinner(spinner);
     }
 
     statusText.textContent = message;
@@ -2520,6 +2543,9 @@ async function startTransform() {
         result_only: resultOnly,
         frame_color: frameColor
     };
+    if (usesStableDiffusion()) {
+        payload.denoising_level = DENOISING_LEVELS[Number(document.getElementById("denoisingRange").value)];
+    }
 
     setTransformOptionsDisabled(true);
     btn.disabled = true;
@@ -2548,6 +2574,7 @@ async function startTransform() {
                 setTransformButtonStatus(btn, "변환 대기 중...");
             }
         });
+        pocketMotion.stopSpinner(btn.querySelector(".spinner"));
         btn.innerText = "완료";
 
         const out = await requestJson(
@@ -2571,10 +2598,13 @@ async function startTransform() {
         console.error(error);
         setTransformOptionsDisabled(false);
         btn.disabled = false;
+        pocketMotion.stopSpinner(btn.querySelector(".spinner"));
         btn.innerText = "다시 시도";
         alert(error.message);
     }
 }
+pocketMotion.init();
+refreshStyleOptions(false);
 </script>
 
 </body>

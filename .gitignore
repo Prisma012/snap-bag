@@ -38,3 +38,9 @@ models/mosaic/*.pt
 
 # 로컬 AI 모델 및 스타일 설정
 /checkpoints.json
+
+# Local Cloudflare Tunnel executable
+/cloudflared/*.exe
+
+# 포스터 작업 파일
+/poster/

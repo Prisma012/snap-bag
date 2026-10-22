@@ -232,7 +232,7 @@ Local filter behavior can be tuned directly in `checkpoints.json`. When a key is
 | Mosaic | `yolo_confidence` | `0.3` | `0.01` to `1.0` |
 | Mosaic | `yolo_iou` | `0.5` | `0.01` to `1.0` |
 | Mosaic | `yolo_imgsz` | `640` | Integer from `320` to `2048` |
-| Mosaic | `yolo_device` | `cpu` | Any Ultralytics-supported device string |
+| Mosaic | `yolo_device` | `auto` | CUDA GPU first, CPU otherwise; explicit device strings remain supported |
 | Mosaic | `face_padding_ratio` | `0.12` | `0.0` to `0.5` |
 | Mosaic | `mosaic_scale` | `0.08` | `0.01` to `1.0`; smaller values create larger mosaic blocks |
 | Canny | `canny_threshold_low` | `50` | `0.0` to `255.0`; must be lower than the high threshold |
@@ -257,7 +257,15 @@ run.bat
 
 `run.bat` also generates `SNAP_POCKET_SECRET_KEY` when it is not already defined. The key signs Flask administrator sessions and is intentionally regenerated for a new launcher session unless you provide a fixed value.
 
-`run.bat` also calls `start_tunnel.ps1`, so `cloudflared` must be installed and available on `PATH`. The helper waits for the Quick Tunnel URL instead of relying on a fixed delay.
+`run.bat` checks `cloudflared` before starting any services, then calls `start_tunnel.ps1` to create the tunnel. Download the Windows executable from the [official Cloudflare downloads page](https://developers.cloudflare.com/tunnel/downloads/) and save it as `cloudflared/cloudflared.exe` inside this project, or install it on `PATH`. The local executable is Git-ignored. The helper also supports `cloudflared.exe` beside `run.bat` and `../cloudflared/cloudflared.exe` for portable layouts.
+
+To use another location, set `SNAP_POCKET_CLOUDFLARED` to the executable's full path. To check the setup without starting services or a tunnel, run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\start_tunnel.ps1 -CheckOnly
+```
+
+The helper waits for the Quick Tunnel URL instead of relying on a fixed delay.
 
 The local application is available at:
 
@@ -358,7 +366,20 @@ Only add origins that you control and trust. This Chrome flag is a per-device de
 - Choose **`[필터] 모자이크`** and select a gender because the shared transform form currently requires both fields. Gender does not change the local mosaic result.
 - The filter runs locally through Ultralytics YOLO and OpenCV, does not call Stable Diffusion, and does not expose the ADetailer option.
 - Every detected face bounding box is expanded by the configured padding ratio before the complete region is pixelated.
+- The default `yolo_device: "auto"` uses a CUDA-capable GPU when PyTorch can access one, otherwise CPU. Automatic mode retries once on CPU if GPU inference fails. A CUDA-enabled PyTorch build and compatible driver are required for GPU execution; `"cpu"` can still be set explicitly to force CPU processing.
 - Missing `checkpoints.json`, missing `face_yolov8*.pt` weights, zero detected faces, or PNG encoding failure produces an explicit error. SnapPocket does not return an unprotected original image as a successful mosaic result.
+
+### Denoising Strength
+
+Stable Diffusion styles expose four guest-facing levels: Low, Default, High, and Ultra. The guest UI shows only the level names. Each new photo starts at Default; the initial strengths are 0.3, 0.45, 0.6, and 0.75 respectively. Original return and local filters do not expose this control.
+
+Administrators can change Default, High, and Ultra independently for each SD style. Valid input is saved automatically after 600 ms of inactivity and must satisfy `0.3 < default < high < ultra <= 1`. Low remains fixed at 0.3. Failed saves keep the draft visible and offer a retry.
+
+Settings are persisted in `checkpoints.<style>.denoising_presets` in the local configuration. Styles without this object use the initial strengths above. The legacy style-level `denoising_strength` field is no longer needed. Older task calls without an explicit strength use the style's Default preset. The presets do not change ADetailer's separate face-correction strength.
+
+`POST /transform` accepts `denoising_level` (`low`, `default`, `high`, or `ultra`), defaulting to `default`. The server resolves the current per-style strength at submission and passes that snapshot to Celery. Later admin edits affect subsequent submissions, including clients whose selection modal is already open, without changing accepted jobs. Changing the slider does not generate previews automatically. Restart both Flask and Celery after upgrading the task code.
+
+Authenticated administrators read `denoising_presets` through `GET /admin_data` and save a style through `POST /admin_denoising_presets` with `{style, values: {default, high, ultra}}`. Existing model and prompt configuration is preserved when saving.
 
 ### Frame Output Modes
 

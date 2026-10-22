@@ -1,0 +1,155 @@
+.motion-ready .ambient,
+.motion-ready .container,
+.motion-ready .preview-content,
+.motion-ready .style-content,
+.motion-ready .countdown-number,
+.motion-ready .spinner {
+    animation: none;
+}
+
+.motion-ready .style-dialog-layout,
+.motion-ready .style-content,
+.motion-ready .frame-color-panel,
+.motion-ready .frame-toggle-track,
+.motion-ready .frame-toggle-thumb,
+.motion-ready .countdown-overlay,
+.motion-ready .coin-balance-toast {
+    transition: none;
+}
+
+.motion-ready .btn,
+.motion-ready .coin-quick-add-button {
+    transition-property: background-color, border-color, box-shadow, color;
+}
+
+.motion-ready .btn:hover:not(:disabled),
+.motion-ready .btn:active:not(:disabled),
+.motion-ready .coin-quick-add-button:hover {
+    transform: none;
+}
+
+.motion-ready .spinner {
+    border-right-color: transparent;
+    border-bottom-color: transparent;
+}
+
+.adetailer-confirm-dialog::backdrop {
+    opacity: var(--backdrop-opacity, 1);
+}
+
+#denoisingOption {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+}
+
+.denoising-slider {
+    position: relative;
+    width: 100%;
+    padding-top: 44px;
+}
+
+.denoising-rail {
+    position: absolute;
+    top: 21px;
+    right: 24px;
+    left: 24px;
+    height: 4px;
+    border-radius: 4px;
+    background: #dcd4ca;
+    pointer-events: none;
+}
+
+.denoising-fill {
+    position: absolute;
+    width: var(--denoising-position);
+    height: 100%;
+    border-radius: inherit;
+    background: var(--primary);
+}
+
+.denoising-stop {
+    position: absolute;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #a99e91;
+    transform: translate(-50%, -50%);
+}
+
+.denoising-thumb {
+    position: absolute;
+    top: 50%;
+    left: var(--denoising-position);
+    width: 22px;
+    height: 22px;
+    border: 3px solid var(--primary);
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(35, 26, 48, 0.2);
+    transform: translate(-50%, -50%);
+}
+
+#denoisingRange {
+    position: absolute;
+    top: 0;
+    left: 12px;
+    width: calc(100% - 24px);
+    height: 44px;
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    opacity: 0;
+    cursor: pointer;
+}
+
+#denoisingRange::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+#denoisingRange::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border: 0;
+}
+
+.denoising-slider:has(input:focus-visible) .denoising-thumb {
+    outline: 3px solid var(--primary);
+    outline-offset: 4px;
+}
+
+.denoising-labels {
+    display: flex;
+    justify-content: space-between;
+}
+
+.denoising-labels button {
+    min-width: 48px;
+    min-height: 36px;
+    padding: 4px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.denoising-labels button[aria-pressed="true"] {
+    color: var(--primary);
+    font-weight: 800;
+}
+
+.denoising-labels button:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+}
+
+.denoising-slider:has(input:disabled) {
+    opacity: 0.55;
+}

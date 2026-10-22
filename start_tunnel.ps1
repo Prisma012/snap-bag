@@ -1,11 +1,55 @@
 param(
-    [string]$Cloudflared = "cloudflared",
+    [string]$Cloudflared = $env:SNAP_POCKET_CLOUDFLARED,
     [ValidateRange(1, 300)]
-    [int]$TimeoutSeconds = 30
+    [int]$TimeoutSeconds = 30,
+    [switch]$CheckOnly
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+function Resolve-CloudflaredPath {
+    param([string]$RequestedPath)
+
+    if (-not [string]::IsNullOrWhiteSpace($RequestedPath)) {
+        $candidates = @([Environment]::ExpandEnvironmentVariables($RequestedPath.Trim('"')))
+    } else {
+        $candidates = @(
+            (Join-Path $PSScriptRoot "cloudflared\cloudflared.exe")
+            (Join-Path $PSScriptRoot "cloudflared.exe")
+            (Join-Path (Split-Path $PSScriptRoot -Parent) "cloudflared\cloudflared.exe")
+            "cloudflared.exe"
+        )
+    }
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+        $command = Get-Command -Name $candidate -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($null -ne $command) {
+            return $command.Source
+        }
+    }
+
+    throw "cloudflared.exe was not found. Place it in '$PSScriptRoot\cloudflared\cloudflared.exe', add it to PATH, or set SNAP_POCKET_CLOUDFLARED to its full path."
+}
+
+try {
+    $cloudflaredPath = Resolve-CloudflaredPath -RequestedPath $Cloudflared
+    Write-Host "Cloudflare executable: $cloudflaredPath"
+    if ($CheckOnly) {
+        & $cloudflaredPath --version
+        if ($LASTEXITCODE -ne 0) {
+            throw "cloudflared version check failed with code $LASTEXITCODE."
+        }
+        exit 0
+    }
+} catch {
+    Write-Host ("Cloudflare setup failed: {0}" -f $_.Exception.Message) -ForegroundColor Red
+    exit 1
+}
 
 $tunnelOrigin = "http://localhost:5000"
 $tunnelUrlPath = Join-Path $PSScriptRoot "tunnel_url.txt"
@@ -22,13 +66,13 @@ try {
         "tunnel"
         "--url", $tunnelOrigin
         "--loglevel", "info"
-        "--logfile", $logPath
+        "--logfile", ('"{0}"' -f $logPath)
     )
 
     $tunnelProcess = Start-Process `
-        -FilePath $Cloudflared `
+        -FilePath $cloudflaredPath `
         -ArgumentList $arguments `
-        -NoNewWindow `
+        -WindowStyle Hidden `
         -PassThru
 
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
@@ -73,7 +117,7 @@ try {
         throw "cloudflared exited with code $($tunnelProcess.ExitCode)."
     }
 } catch {
-    Write-Error $_
+    Write-Host ("Cloudflare tunnel failed: {0}" -f $_.Exception.Message) -ForegroundColor Red
     $scriptExitCode = 1
 } finally {
     if ($null -ne $tunnelProcess -and -not $tunnelProcess.HasExited) {

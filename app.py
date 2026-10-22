@@ -17,6 +17,10 @@ import copy
 import glob
 import logging
 import secrets
+import ipaddress
+import re
+import math
+from urllib.parse import urlsplit
 
 # 로깅 설정
 class ColorFormatter(logging.Formatter):
@@ -70,6 +74,7 @@ celery.conf.update(app.config)
 _coin_balances_by_client = {}
 _coin_lock_states_by_client = {}
 _coin_first_seen_by_client = {}
+_coin_connection_info_by_client = {}
 _coin_remote_events_by_client = {}
 _coin_remote_event_sequences_by_client = {}
 _coin_runtime_id = uuid.uuid4().hex
@@ -81,11 +86,14 @@ _discarded_temp_sessions = {}
 _yolo_face_model_lock = Lock()
 _yolo_face_inference_lock = Lock()
 _yolo_face_models = {}
+_checkpoint_config_lock = Lock()
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # 기본 경로 설정
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CHECKPOINT_CONFIG_PATH = os.path.join(BASE_DIR, "checkpoints.json")
+DEFAULT_DENOISING_PRESETS = {"low": 0.3, "default": 0.45, "high": 0.6, "ultra": 0.75}
 TEMP_DIR = os.path.join(BASE_DIR, "temp")
 PUBLIC_DIR = os.path.join(BASE_DIR, "public")
 PREVIEW_DIR = os.path.join(BASE_DIR, "static/preview")
@@ -145,6 +153,17 @@ def _bounded_float(config, key, default, minimum, maximum):
     return value
 
 
+def _resolve_yolo_device(config):
+    requested = config.get("yolo_device")
+    device = "auto" if requested is None else str(requested).strip().lower()
+    if device not in {"", "auto"}:
+        return device
+
+    import torch
+
+    return "cuda:0" if torch.cuda.is_available() else "cpu"
+
+
 def _detect_yolo_faces(image_bgr, config):
     confidence = _bounded_float(config, "yolo_confidence", 0.3, 0.01, 1.0)
     iou = _bounded_float(config, "yolo_iou", 0.5, 0.01, 1.0)
@@ -156,15 +175,26 @@ def _detect_yolo_faces(image_bgr, config):
         raise ValueError("yolo_imgsz must be between 320 and 2048.")
 
     model = _get_yolo_face_model()
+    device = _resolve_yolo_device(config)
+    requested_device = config.get("yolo_device")
+    automatic_device = requested_device is None or str(requested_device).strip().lower() in {"", "auto"}
+    predict_options = {
+        "source": image_bgr,
+        "conf": confidence,
+        "iou": iou,
+        "imgsz": image_size,
+        "verbose": False,
+    }
     with _yolo_face_inference_lock:
-        results = model.predict(
-            source=image_bgr,
-            conf=confidence,
-            iou=iou,
-            imgsz=image_size,
-            device=str(config.get("yolo_device", "cpu")),
-            verbose=False,
-        )
+        logger.info("YOLO face detection device: %s", device)
+        try:
+            results = model.predict(device=device, **predict_options)
+        except RuntimeError as exc:
+            if not automatic_device or device == "cpu":
+                raise
+            logger.warning("YOLO GPU inference failed on %s; retrying on CPU: %s", device, exc)
+            model.to("cpu")
+            results = model.predict(device="cpu", **predict_options)
 
     face_boxes = []
     for result in results or []:
@@ -321,6 +351,50 @@ def _write_json_object(path, data):
             os.remove(temp_path)
 
 
+def _load_checkpoint_config():
+    try:
+        with open(CHECKPOINT_CONFIG_PATH, "r", encoding="utf-8") as source:
+            config = json.load(source)
+        if not isinstance(config, dict) or not isinstance(config.get("checkpoints"), dict):
+            raise ValueError("checkpoints must be an object")
+        return config
+    except (OSError, ValueError) as error:
+        raise RuntimeError("스타일 설정을 불러오지 못했습니다. checkpoints.json을 확인해주세요.") from error
+
+
+def _validate_denoising_values(values):
+    keys = ("default", "high", "ultra")
+    if not isinstance(values, dict) or set(values) != set(keys):
+        raise ValueError("기본, 높음, 울트라 값을 모두 입력해주세요.")
+    if any(type(values[key]) not in (int, float) or not 0 <= values[key] <= 1
+           or not math.isfinite(values[key]) for key in keys):
+        raise ValueError("변형도는 유한한 숫자여야 합니다.")
+    if not 0.3 < values["default"] < values["high"] < values["ultra"] <= 1:
+        raise ValueError("0.3 < 기본 < 높음 < 울트라 ≤ 1 순서로 입력해주세요.")
+    return {key: float(values[key]) for key in keys}
+
+
+def _get_denoising_presets(style_config):
+    values = style_config.get("denoising_presets")
+    if values is None:
+        return dict(DEFAULT_DENOISING_PRESETS)
+    return {"low": 0.3, **_validate_denoising_values(values)}
+
+
+def _admin_denoising_settings():
+    try:
+        styles = _load_checkpoint_config()["checkpoints"]
+        return {
+            "denoising_presets": {
+                key: _get_denoising_presets(config)
+                for key, config in styles.items()
+                if isinstance(config, dict) and config.get("model_name") is not None
+            }
+        }
+    except (RuntimeError, ValueError) as error:
+        return {"denoising_presets": {}, "denoising_error": str(error)}
+
+
 def _get_session_folder(session_id):
     if not isinstance(session_id, str) or not session_id:
         return None
@@ -410,9 +484,95 @@ def _normalize_coin_client_id(raw_client_id):
 
 
 def _get_coin_client_id():
-    return _normalize_coin_client_id(
+    client_id = _normalize_coin_client_id(
         request.headers.get("X-SnapPocket-Client-ID", "")
     )
+    if client_id is not None:
+        connection_info = _get_coin_client_connection_info()
+        with _coin_balance_lock:
+            _coin_connection_info_by_client[client_id] = connection_info
+    return client_id
+
+
+def _parse_client_software(user_agent):
+    operating_system = "확인 불가"
+    os_patterns = (
+        (r"(?:iPhone|iPad|iPod).*?OS ([\d_]+)", "iOS"),
+        (r"Android(?: ([\d.]+))?", "Android"),
+        (r"CrOS \S+ ([\d.]+)", "ChromeOS"),
+        (r"Windows NT ([\d.]+)", "Windows"),
+        (r"Mac OS X[ /]([\d_]+)", "macOS"),
+    )
+    for pattern, name in os_patterns:
+        match = re.search(pattern, user_agent)
+        if match:
+            version = (match.group(1) or "").replace("_", ".")
+            if name == "Windows":
+                version = {
+                    "10.0": "10/11", "6.3": "8.1", "6.2": "8",
+                    "6.1": "7", "6.0": "Vista", "5.1": "XP",
+                }.get(version, version)
+            operating_system = f"{name} {version}".strip()
+            break
+    else:
+        for token, name in (("Linux", "Linux"), ("Macintosh", "macOS"),
+                            ("Windows", "Windows"), ("iPad", "iPadOS")):
+            if token in user_agent:
+                operating_system = name
+                break
+
+    browser = "확인 불가"
+    browser_patterns = (
+        (r"(?:Edg|EdgA|EdgiOS|Edge)/([\d.]+)", "Microsoft Edge"),
+        (r"(?:OPR|OPiOS)/([\d.]+)", "Opera"),
+        (r"SamsungBrowser/([\d.]+)", "Samsung Internet"),
+        (r"Whale/([\d.]+)", "Whale"),
+        (r"(?:Firefox|FxiOS)/([\d.]+)", "Firefox"),
+        (r"(?:Chrome|CriOS)/([\d.]+)", "Chrome"),
+        (r"Version/([\d.]+).*Safari/", "Safari"),
+        (r"(?:MSIE |Trident/.*rv:)([\d.]+)", "Internet Explorer"),
+    )
+    for pattern, name in browser_patterns:
+        match = re.search(pattern, user_agent)
+        if match:
+            browser = f"{name} {match.group(1)}"
+            break
+    return operating_system, browser
+
+
+def _classify_connection_type(hostname):
+    hostname = (hostname or "").lower().rstrip(".")
+    if not hostname:
+        return "unknown"
+    if hostname == "localhost" or hostname.endswith(".localhost"):
+        return "local"
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        if "." not in hostname or hostname.endswith((".local", ".lan", ".home.arpa")):
+            return "lan"
+        return "public"
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    if address.is_loopback or address.is_unspecified:
+        return "local"
+    return "lan" if address.is_private or address.is_link_local else "public"
+
+
+def _get_coin_client_connection_info():
+    user_agent = request.headers.get("User-Agent", "")[:1024]
+    operating_system, browser = _parse_client_software(user_agent)
+    # Use the requested address: a tunnel's peer address may also be loopback.
+    origin = urlsplit(request.host_url)
+    forwarded_scheme = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip().lower()
+    scheme = forwarded_scheme if forwarded_scheme in ("http", "https") else origin.scheme
+    return {
+        "os": operating_system,
+        "browser": browser,
+        "connection_type": _classify_connection_type(origin.hostname),
+        "connection_origin": f"{scheme}://{origin.netloc}",
+        "last_seen": datetime.now().astimezone().isoformat(timespec="seconds"),
+    }
 
 
 def _get_coin_client_state_unlocked(client_id):
@@ -452,7 +612,8 @@ def _get_coin_balances_snapshot():
                 "client_id": client_id,
                 "balance": balance,
                 "locked": _coin_lock_states_by_client.setdefault(client_id, True),
-                "first_seen": first_seen
+                "first_seen": first_seen,
+                **_coin_connection_info_by_client.get(client_id, {})
             })
         return sorted(
             clients,
@@ -514,10 +675,17 @@ def consume_coin():
 # 메인 페이지
 @app.route("/main_page")
 def index():
+    try:
+        styles = _load_checkpoint_config()["checkpoints"]
+        sd_styles = [key for key, config in styles.items()
+                     if isinstance(config, dict) and config.get("model_name") is not None]
+    except RuntimeError:
+        sd_styles = []
     return render_template(
         "index.html",
         watermark_text=_get_watermark_text(),
-        force_low_res=FORCE_LOW_RES
+        force_low_res=FORCE_LOW_RES,
+        stable_diffusion_styles=sd_styles
     )
 
 # 관리자 로그인
@@ -621,6 +789,32 @@ def admin_coin_client_balance():
     return _coin_balance_response(payload, status)
 
 
+@app.route("/admin_denoising_presets", methods=["POST"])
+@admin_required
+def admin_denoising_presets():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("style"), str):
+        return jsonify({"error": "스타일과 변형도 설정을 입력해주세요."}), 400
+    style_key = data["style"]
+    try:
+        values = _validate_denoising_values(data.get("values"))
+        with _checkpoint_config_lock:
+            config = _load_checkpoint_config()
+            style = config["checkpoints"].get(style_key)
+            if not isinstance(style, dict) or style.get("model_name") is None:
+                raise ValueError("Stable Diffusion 스타일만 설정할 수 있습니다.")
+            style["denoising_presets"] = values
+            _write_json_object(CHECKPOINT_CONFIG_PATH, config)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except (OSError, RuntimeError):
+        logger.exception("Failed to save denoising presets")
+        return jsonify({"error": "변형도를 저장하지 못했습니다. 잠시 후 다시 입력해주세요."}), 503
+    response = jsonify({"style": style_key, "values": {"low": 0.3, **values}})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 # 관리자 페이지 데이터
 @app.route("/admin_data")
 @admin_required
@@ -661,8 +855,7 @@ def admin_data():
             if result_path is not None
             else None
         )
-        timestamp_source = raw_path if os.path.isfile(raw_path) else session_path
-        timestamp = os.path.getmtime(timestamp_source)
+        timestamp = os.path.getctime(session_path)
 
         status_data = _load_json_object(
             os.path.join(session_path, TRANSFORM_STATUS_FILENAME)
@@ -702,7 +895,7 @@ def admin_data():
         if not os.path.isdir(public_path) or not os.path.isfile(result_path):
             continue
         raw_path = os.path.join(public_path, "raw.png")
-        timestamp = os.path.getmtime(result_path)
+        timestamp = os.path.getctime(public_path)
         items.append({
             "id": f"legacy-{folder}",
             "folder": folder,
@@ -739,6 +932,7 @@ def admin_data():
     )
     return jsonify({
         "items": items,
+        **_admin_denoising_settings(),
         "coin_clients": coin_clients,
         "stats": {
             "photo_count": len(session_folders),
@@ -1069,10 +1263,10 @@ def discard_temp():
     return jsonify({"session_id": session_id, "deleted": deleted})
 
 # 변환 처리
-def _run_transform_task(session_id, style_key, gender, adetailer_enabled, overrides):
+def _run_transform_task(session_id, style_key, gender, adetailer_enabled, overrides, denoising_strength=None):
 
     # 실시간 Checkpoint 설정 로드
-    checkpoint_path = os.path.join(BASE_DIR, "checkpoints.json")
+    checkpoint_path = CHECKPOINT_CONFIG_PATH
 
     if not os.path.isfile(checkpoint_path):
         raise RuntimeError(
@@ -1081,8 +1275,7 @@ def _run_transform_task(session_id, style_key, gender, adetailer_enabled, overri
         )
 
     try:
-        with open(checkpoint_path, "r", encoding="utf-8") as f:
-            STYLE_CONFIG = json.load(f)["checkpoints"]
+        STYLE_CONFIG = _load_checkpoint_config()["checkpoints"]
 
     except Exception as e:
         logger.exception(f"checkpoints.json load failed: {e}")
@@ -1100,6 +1293,10 @@ def _run_transform_task(session_id, style_key, gender, adetailer_enabled, overri
 
         cfg = copy.deepcopy(STYLE_CONFIG.get(style_key, {}))
         cfg.update(overrides)
+        if denoising_strength is not None:
+            cfg["denoising_strength"] = denoising_strength
+        elif cfg.get("model_name") is not None and "denoising_strength" not in cfg:
+            cfg["denoising_strength"] = _get_denoising_presets(cfg)["default"]
 
         if cfg.get("model_name") is None:
             adetailer_enabled = False
@@ -1266,7 +1463,8 @@ def _run_transform_task(session_id, style_key, gender, adetailer_enabled, overri
         transform_metadata.update({
             "style": style_key,
             "gender": gender,
-            "adetailer_enabled": adetailer_enabled
+            "adetailer_enabled": adetailer_enabled,
+            "denoising_strength": cfg.get("denoising_strength") if cfg.get("model_name") is not None else None
         })
         _write_json_object(transform_metadata_path, transform_metadata)
 
@@ -1275,14 +1473,15 @@ def _run_transform_task(session_id, style_key, gender, adetailer_enabled, overri
 
 # 변환 Task
 @celery.task(bind=True)
-def process_transform_task(self, session_id, style_key, gender, adetailer_enabled, overrides):
+def process_transform_task(self, session_id, style_key, gender, adetailer_enabled, overrides, denoising_strength=None):
     try:
         result = _run_transform_task(
             session_id,
             style_key,
             gender,
             adetailer_enabled,
-            overrides
+            overrides,
+            denoising_strength=denoising_strength
         )
         _write_transform_status(session_id, "success")
         return result
@@ -1298,6 +1497,8 @@ def process_transform_task(self, session_id, style_key, gender, adetailer_enable
 @app.route("/transform", methods=["POST"])
 def transform():
     data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "변환 요청 정보가 올바르지 않습니다."}), 400
     session_id = data.get("session_id")
     style_key = data.get("style")
     gender = data.get("gender")
@@ -1306,9 +1507,12 @@ def transform():
     result_only = data.get("result_only", False)
     frame_color = data.get("frame_color", DEFAULT_FRAME_COLOR)
     overrides = data.get("overrides", {})
+    denoising_level = data.get("denoising_level", "default")
 
-    if not session_id or not style_key:
+    if not session_id or not isinstance(style_key, str) or not style_key:
         return jsonify({"error": "변환 요청 정보가 올바르지 않습니다."}), 400
+    if not isinstance(overrides, dict):
+        return jsonify({"error": "스타일 추가 설정은 객체여야 합니다."}), 400
     if type(adetailer_enabled) is not bool:
         return jsonify({"error": "ADetailer 보정 여부는 boolean 값이어야 합니다."}), 400
     if type(result_only) is not bool:
@@ -1322,6 +1526,22 @@ def transform():
         or frame_color not in FRAME_COLOR_PRESETS
     ):
         return jsonify({"error": "지원하지 않는 프레임 색상입니다."}), 400
+
+    try:
+        style_config = _load_checkpoint_config()["checkpoints"].get(style_key)
+        if not isinstance(style_config, dict) or style_key == "distortion_lens_filter":
+            raise ValueError("지원하지 않는 스타일입니다.")
+        if style_config.get("model_name") is not None:
+            if not isinstance(denoising_level, str) or denoising_level not in DEFAULT_DENOISING_PRESETS:
+                raise ValueError("지원하지 않는 변형도입니다.")
+            denoising_strength = _get_denoising_presets(style_config)[denoising_level]
+        else:
+            denoising_level = None
+            denoising_strength = None
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except RuntimeError as error:
+        return jsonify({"error": str(error)}), 503
 
     session_folder = _get_session_folder(session_id)
     if (
@@ -1340,12 +1560,15 @@ def transform():
                 "add_frame": add_frame,
                 "frame_color": frame_color if add_frame else None,
                 "result_only": result_only,
-                "adetailer_enabled": adetailer_enabled
+                "adetailer_enabled": adetailer_enabled,
+                "denoising_level": denoising_level,
+                "denoising_strength": denoising_strength
             }
         )
         _write_transform_status(session_id, "processing", task_id=task_id)
         task = process_transform_task.apply_async(
             args=[session_id, style_key, gender, adetailer_enabled, overrides],
+            kwargs={"denoising_strength": denoising_strength},
             task_id=task_id
         )
     except Exception as e:
@@ -1434,7 +1657,9 @@ def finalize():
             "add_frame": add_frame,
             "frame_color": frame_color if add_frame else None,
             "result_only": result_only,
-            "adetailer_enabled": transform_metadata.get("adetailer_enabled")
+            "adetailer_enabled": transform_metadata.get("adetailer_enabled"),
+            "denoising_level": transform_metadata.get("denoising_level"),
+            "denoising_strength": transform_metadata.get("denoising_strength")
         }
         metadata_path = os.path.join(METADATA_DIR, f"{hash_value}.json")
         with open(metadata_path, "w", encoding="utf-8") as f:
@@ -1528,7 +1753,7 @@ def admin_page():
     for f in folders:
         img_path = os.path.join(PUBLIC_DIR, f, "result.png")
         if os.path.exists(img_path):
-            ts = time.ctime(os.path.getmtime(img_path))
+            ts = time.ctime(os.path.getctime(os.path.join(PUBLIC_DIR, f)))
             result.append({"folder": f, "time": ts})
     return render_template("admin.html", items=result)
 
