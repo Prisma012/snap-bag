@@ -815,6 +815,18 @@ def admin_denoising_presets():
     return response
 
 
+def _get_raw_image_version(path):
+    digest = hashlib.sha256()
+    try:
+        with open(path, "rb") as image_file:
+            image_stat = os.fstat(image_file.fileno())
+            for chunk in iter(lambda: image_file.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return f"{image_stat.st_mtime_ns}:{image_stat.st_size}:{digest.hexdigest()}"
+
+
 # 관리자 페이지 데이터
 @app.route("/admin_data")
 @admin_required
@@ -833,6 +845,7 @@ def admin_data():
         folder = hashlib.sha256(session_id.encode()).hexdigest()[:16]
         public_folders_for_sessions.add(folder)
         raw_path = os.path.join(session_path, "raw.png")
+        raw_version = _get_raw_image_version(raw_path)
         public_result_path = os.path.join(PUBLIC_DIR, folder, "result.png")
         preview_path = os.path.join(PREVIEW_DIR, f"{session_id}.png")
         finalized = os.path.isfile(public_result_path)
@@ -878,10 +891,11 @@ def admin_data():
             "metadata": metadata,
             "result_kind": result_kind,
             "result_version": result_version,
+            "raw_version": raw_version,
             "finalized": finalized,
             "raw_url": (
                 f"/admin_session_image/{session_id}/raw"
-                if os.path.isfile(raw_path)
+                if raw_version is not None
                 else None
             ),
             "result_url": result_url
@@ -895,6 +909,7 @@ def admin_data():
         if not os.path.isdir(public_path) or not os.path.isfile(result_path):
             continue
         raw_path = os.path.join(public_path, "raw.png")
+        raw_version = _get_raw_image_version(raw_path)
         timestamp = os.path.getctime(public_path)
         items.append({
             "id": f"legacy-{folder}",
@@ -907,8 +922,9 @@ def admin_data():
             ),
             "result_kind": "final",
             "result_version": os.stat(result_path).st_mtime_ns,
+            "raw_version": raw_version,
             "finalized": True,
-            "raw_url": f"/public/{folder}/raw.png" if os.path.isfile(raw_path) else None,
+            "raw_url": f"/public/{folder}/raw.png" if raw_version is not None else None,
             "result_url": f"/public/{folder}/result.png"
         })
 

@@ -948,6 +948,16 @@
             font-weight: 600;
         }
 
+        .capture-protection-notice {
+            margin: 10px 0 0;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 400;
+            line-height: 1.5;
+            text-align: center;
+            word-break: keep-all;
+        }
+
         .preview-coin-balance {
             display: flex;
             align-items: center;
@@ -1219,9 +1229,11 @@
         }
 
         .coin-balance-toast.has-error {
-            border-color: #8f5b56;
-            background: #382522;
-            color: #ffe9e5;
+            border-color: #f06a7c;
+            background: #9b1c31;
+            color: #fff3f5;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
         }
 
         .coin-balance-toast.is-remote-add {
@@ -1544,6 +1556,7 @@
                     </aside>
                 </div>
                 <button id="transformBtn" class="btn" onclick="startTransform()" disabled>이미지 변환</button>
+                <p class="capture-protection-notice" role="status" hidden></p>
             </div>
         </div>
     </div>
@@ -1571,6 +1584,7 @@ let captureAttemptId = 0;
 let uploadController = null;
 let uploadState = "idle";
 let previewProceeding = false;
+let capturePaymentState = "unpaid";
 window.currentSession = null;
 const TRANSFORM_TIMEOUT_MS = 10 * 60 * 1000;
 const TRANSFORM_POLL_INTERVAL_MS = 1500;
@@ -1587,6 +1601,7 @@ let latestAppliedCoinRequest = 0;
 let coinMutationCount = 0;
 let coinSystemAvailable = false;
 let coinNoticeTimer = null;
+let coinNoticeTone = "default";
 let coinClientLocked = true;
 let captureFlowActive = false;
 let cameraReady = false;
@@ -1644,6 +1659,34 @@ function getOrCreateCoinClientId() {
 
 const coinClientId = getOrCreateCoinClientId();
 
+function confirmCaptureExit(event) {
+    event.preventDefault();
+    event.returnValue = true;
+}
+
+function setCapturePaymentState(state) {
+    capturePaymentState = state;
+    const protectedCapture = state !== "unpaid";
+    if (protectedCapture) {
+        window.addEventListener("beforeunload", confirmCaptureExit);
+    } else {
+        window.removeEventListener("beforeunload", confirmCaptureExit);
+    }
+    document.querySelectorAll(".capture-protection-notice").forEach(notice => {
+        notice.hidden = !protectedCapture;
+        notice.textContent = "사진 처리가 완료될 때까지 새로고침하지 말아주세요.";
+    });
+}
+
+document.addEventListener("keydown", event => {
+    if (capturePaymentState === "unpaid") return;
+    const reloadShortcut = event.key === "F5"
+        || ((event.ctrlKey || event.metaKey) && event.code === "KeyR");
+    if (!reloadShortcut) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+}, { capture: true });
+
 function normalizeCoinBalance(value) {
     const parsed = Number(value);
     return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 0;
@@ -1680,12 +1723,10 @@ function hideCoinBalanceNotice() {
     pocketMotion.notice(toast, false);
     toast.setAttribute("aria-hidden", "true");
     coinNoticeTimer = null;
-
-    if (remoteCoinNoticeShowing) {
-        remoteCoinNoticeShowing = false;
-        if (remoteCoinNoticeQueue.length > 0) {
-            setTimeout(showNextRemoteCoinNotice, 120);
-        }
+    coinNoticeTone = "default";
+    remoteCoinNoticeShowing = false;
+    if (remoteCoinNoticeQueue.length > 0) {
+        setTimeout(showNextRemoteCoinNotice, 120);
     }
 }
 
@@ -1693,19 +1734,22 @@ function showCoinBalanceNotice(message = "", tone = message ? "error" : "default
     const toast = document.getElementById("coinBalanceToast");
     const text = document.getElementById("coinBalanceText");
 
+    coinNoticeTone = tone;
     text.textContent = message || `입력된 코인 개수: ${getCoinBalance().toLocaleString("ko-KR")}개`;
     toast.classList.toggle("has-error", tone === "error");
     toast.classList.toggle("is-remote-add", tone === "remote-add");
     toast.classList.toggle("is-remote-subtract", tone === "remote-subtract");
+    toast.setAttribute("role", tone === "error" ? "alert" : "status");
+    toast.setAttribute("aria-live", tone === "error" ? "assertive" : "polite");
     toast.setAttribute("aria-hidden", "false");
     pocketMotion.notice(toast, true);
 
     if (coinNoticeTimer) clearTimeout(coinNoticeTimer);
-    coinNoticeTimer = setTimeout(hideCoinBalanceNotice, COIN_NOTICE_DURATION_MS);
+    coinNoticeTimer = setTimeout(hideCoinBalanceNotice, tone === "error" ? 6000 : COIN_NOTICE_DURATION_MS);
 }
 
 function showNextRemoteCoinNotice() {
-    if (remoteCoinNoticeShowing || remoteCoinNoticeQueue.length === 0) return;
+    if (remoteCoinNoticeShowing || coinNoticeTone === "error" || remoteCoinNoticeQueue.length === 0) return;
     const event = remoteCoinNoticeQueue.shift();
     const added = event.delta > 0;
     remoteCoinNoticeShowing = true;
@@ -1858,6 +1902,7 @@ async function addCoin() {
 async function consumeCoin() {
     const requestId = ++coinRequestSequence;
     coinMutationCount += 1;
+    setCapturePaymentState("pending");
     try {
         const data = await requestCoinApi("/coin_balance/consume", "POST");
         applyCoinBalance(
@@ -1868,8 +1913,11 @@ async function consumeCoin() {
             data.coin_runtime_id,
             data.remote_events
         );
+        setCapturePaymentState("paid");
         return true;
     } catch (error) {
+        const rejected = [400, 409, 415].includes(error.status);
+        setCapturePaymentState(rejected ? "unpaid" : "unknown");
         if (error.status === 409) {
             applyCoinBalance(
                 error.balance,
@@ -1919,6 +1967,11 @@ function getSelectedFrameColor() {
 
 function updateContinueButton() {
     const button = document.getElementById("btnContinue");
+    if (capturePaymentState === "unknown") {
+        button.disabled = true;
+        button.innerText = "차감 확인 필요";
+        return;
+    }
     if (previewProceeding) {
         button.disabled = true;
         button.innerText = "코인 확인 중...";
@@ -2153,7 +2206,7 @@ if (!navigator.mediaDevices?.getUserMedia) {
 function capture() {
     if (!cameraReady || !getCameraSourceDimensions()) {
         setCameraReady(false);
-        alert("카메라가 준비될 때까지 잠시 기다려주세요.");
+        showCoinBalanceNotice("카메라가 준비될 때까지 잠시 기다려주세요.");
         return;
     }
     captureFlowActive = true;
@@ -2198,7 +2251,7 @@ function takePhoto() {
         setCameraReady(false);
         captureFlowActive = false;
         updateCoinQuickAddButton();
-        alert("카메라 해상도를 확인하지 못했습니다. 다시 시도해주세요.");
+        showCoinBalanceNotice("카메라 해상도를 확인하지 못했습니다. 다시 시도해주세요.");
         return;
     }
 
@@ -2265,7 +2318,7 @@ function uploadImage(dataURL) {
         uploadState = "error";
         document.getElementById("retakeBtn").disabled = false;
         updateContinueButton();
-        alert(error.message);
+        showCoinBalanceNotice(error.message);
     })
     .finally(() => {
         if (uploadController === controller) uploadController = null;
@@ -2307,6 +2360,7 @@ async function discardTempSession(sessionId) {
 }
 
 function retakePhoto() {
+    if (capturePaymentState !== "unpaid") return;
     const sessionId = window.currentSession;
     captureAttemptId += 1;
     if (uploadController) uploadController.abort();
@@ -2324,9 +2378,9 @@ function retakePhoto() {
 }
 
 async function goToStyleSelect() {
-    if (previewProceeding) return;
+    if (previewProceeding || capturePaymentState !== "unpaid") return;
     if (uploadState !== "success" || !window.currentSession) {
-        alert("이미지 업로드가 완료될 때까지 기다려주세요.");
+        showCoinBalanceNotice("이미지 업로드가 완료될 때까지 기다려주세요.");
         return;
     }
     previewProceeding = true;
@@ -2336,9 +2390,11 @@ async function goToStyleSelect() {
     const coinConsumed = await consumeCoin();
     if (!coinConsumed) {
         previewProceeding = false;
-        retakeBtn.disabled = false;
+        retakeBtn.disabled = capturePaymentState !== "unpaid";
         updateContinueButton();
-        alert("사용 가능한 코인이 없습니다. 코인 입력 상태를 확인해주세요.");
+        showCoinBalanceNotice(capturePaymentState === "unknown"
+            ? "코인 차감 결과를 확인하지 못했습니다. 새로고침하거나 다시 진행하지 마시고 관리자에게 문의해주세요."
+            : "코인을 차감하지 못했습니다. 코인 입력 상태를 확인해주세요.");
         return;
     }
     pocketMotion.hideModal(document.getElementById("previewModal"), () => {
@@ -2521,7 +2577,7 @@ function setTransformButtonStatus(btn, message) {
 async function startTransform() {
     const btn = document.getElementById("transformBtn");
     if (!window.currentSession) {
-        alert("이미지 업로드 중입니다. 잠시 후 다시 시도해주세요.");
+        showCoinBalanceNotice("이미지 업로드 중입니다. 잠시 후 다시 시도해주세요.");
         return;
     }
 
@@ -2592,15 +2648,23 @@ async function startTransform() {
             },
             "결과 이미지를 저장하지 못했습니다."
         );
-        if (!out.download_url) throw new Error("다운로드 주소를 만들지 못했습니다.");
-        window.location.href = out.download_url;
+        if (typeof out.download_url !== "string" || !out.download_url.trim()) {
+            throw new Error("다운로드 주소를 만들지 못했습니다.");
+        }
+        const downloadUrl = new URL(out.download_url, window.location.href);
+        if (!["http:", "https:"].includes(downloadUrl.protocol)) {
+            throw new Error("다운로드 주소가 올바르지 않습니다.");
+        }
+        setCapturePaymentState("unpaid");
+        window.location.href = downloadUrl.href;
     } catch (error) {
+        setCapturePaymentState("paid");
         console.error(error);
         setTransformOptionsDisabled(false);
         btn.disabled = false;
         pocketMotion.stopSpinner(btn.querySelector(".spinner"));
         btn.innerText = "다시 시도";
-        alert(error.message);
+        showCoinBalanceNotice(error.message);
     }
 }
 pocketMotion.init();
