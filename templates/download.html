@@ -704,9 +704,11 @@
         }
 
         .coin-balance-toast.has-error {
-            border-color: #8f5b56;
-            background: #382522;
-            color: #ffe9e5;
+            border-color: #f06a7c;
+            background: #9b1c31;
+            color: #fff3f5;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
         }
 
         .coin-balance-toast.is-remote-add {
@@ -824,6 +826,7 @@ let latestAppliedCoinRequest = 0;
 let coinMutationCount = 0;
 let coinSystemAvailable = false;
 let coinNoticeTimer = null;
+let coinNoticeTone = "default";
 let remoteCoinRuntimeId = null;
 let latestRemoteCoinEventId = 0;
 let remoteCoinEventsInitialized = false;
@@ -884,12 +887,10 @@ function hideCoinBalanceNotice() {
     toast.classList.remove("is-visible");
     toast.setAttribute("aria-hidden", "true");
     coinNoticeTimer = null;
-
-    if (remoteCoinNoticeShowing) {
-        remoteCoinNoticeShowing = false;
-        if (remoteCoinNoticeQueue.length > 0) {
-            setTimeout(showNextRemoteCoinNotice, 120);
-        }
+    coinNoticeTone = "default";
+    remoteCoinNoticeShowing = false;
+    if (remoteCoinNoticeQueue.length > 0) {
+        setTimeout(showNextRemoteCoinNotice, 120);
     }
 }
 
@@ -897,21 +898,24 @@ function showCoinBalanceNotice(message = "", tone = message ? "error" : "default
     const toast = document.getElementById("coinBalanceToast");
     const text = document.getElementById("coinBalanceText");
 
+    coinNoticeTone = tone;
     text.textContent = message || `입력된 코인 개수: ${getCoinBalance().toLocaleString("ko-KR")}개`;
     toast.classList.toggle("has-error", tone === "error");
     toast.classList.toggle("is-remote-add", tone === "remote-add");
     toast.classList.toggle("is-remote-subtract", tone === "remote-subtract");
+    toast.setAttribute("role", tone === "error" ? "alert" : "status");
+    toast.setAttribute("aria-live", tone === "error" ? "assertive" : "polite");
     toast.classList.remove("is-visible");
     toast.setAttribute("aria-hidden", "false");
     void toast.offsetWidth;
     toast.classList.add("is-visible");
 
     if (coinNoticeTimer) clearTimeout(coinNoticeTimer);
-    coinNoticeTimer = setTimeout(hideCoinBalanceNotice, COIN_NOTICE_DURATION_MS);
+    coinNoticeTimer = setTimeout(hideCoinBalanceNotice, tone === "error" ? 6000 : COIN_NOTICE_DURATION_MS);
 }
 
 function showNextRemoteCoinNotice() {
-    if (remoteCoinNoticeShowing || remoteCoinNoticeQueue.length === 0) return;
+    if (remoteCoinNoticeShowing || coinNoticeTone === "error" || remoteCoinNoticeQueue.length === 0) return;
     const event = remoteCoinNoticeQueue.shift();
     const added = event.delta > 0;
     remoteCoinNoticeShowing = true;

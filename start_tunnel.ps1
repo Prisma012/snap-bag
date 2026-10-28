@@ -36,6 +36,73 @@ function Resolve-CloudflaredPath {
     throw "cloudflared.exe was not found. Place it in '$PSScriptRoot\cloudflared\cloudflared.exe', add it to PATH, or set SNAP_POCKET_CLOUDFLARED to its full path."
 }
 
+function Test-PageResponse {
+    param(
+        [string]$Url,
+        [int]$TimeoutMilliseconds = 2000
+    )
+
+    $cancellation = New-Object System.Threading.CancellationTokenSource
+    $response = $null
+    try {
+        $cancellation.CancelAfter($TimeoutMilliseconds)
+        $requestTask = $httpClient.GetAsync(
+            $Url,
+            [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead,
+            $cancellation.Token
+        )
+        if (-not $requestTask.Wait($TimeoutMilliseconds)) {
+            $cancellation.Cancel()
+            return $false
+        }
+        $response = $requestTask.GetAwaiter().GetResult()
+        return [int]$response.StatusCode -eq 200
+    } catch {
+        return $false
+    } finally {
+        if ($null -ne $response) {
+            $response.Dispose()
+        }
+        $cancellation.Dispose()
+    }
+}
+
+function Get-LanBaseUrl {
+    # Match app.py's get_lan_ip(): select the IPv4 route to 8.8.8.8 without sending data.
+    $socket = New-Object System.Net.Sockets.UdpClient ([System.Net.Sockets.AddressFamily]::InterNetwork)
+    try {
+        $socket.Connect("8.8.8.8", 80)
+        $address = $socket.Client.LocalEndPoint.Address
+        if ([System.Net.IPAddress]::IsLoopback($address) -or
+            $address.Equals([System.Net.IPAddress]::Any) -or
+            $address.Equals([System.Net.IPAddress]::Broadcast)) {
+            throw "No usable LAN IPv4 address was detected."
+        }
+        return "http://{0}:5000" -f $address.IPAddressToString
+    } catch {
+        throw "LAN IPv4 detection failed: $($_.Exception.Message)"
+    } finally {
+        $socket.Dispose()
+    }
+}
+
+function Save-AccessUrl {
+    param([string]$Url, [string]$Path)
+
+    $temporaryPath = "$Path.$PID.tmp"
+    try {
+        # app.py reads UTF-16. Publish the complete file in a single rename.
+        [System.IO.File]::WriteAllText($temporaryPath, $Url, [System.Text.Encoding]::Unicode)
+        if ([System.IO.File]::Exists($Path)) {
+            [System.IO.File]::Replace($temporaryPath, $Path, [System.Management.Automation.Language.NullString]::Value)
+        } else {
+            [System.IO.File]::Move($temporaryPath, $Path)
+        }
+    } finally {
+        Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 try {
     $cloudflaredPath = Resolve-CloudflaredPath -RequestedPath $Cloudflared
     Write-Host "Cloudflare executable: $cloudflaredPath"
@@ -55,12 +122,21 @@ $tunnelOrigin = "http://localhost:5000"
 $tunnelUrlPath = Join-Path $PSScriptRoot "tunnel_url.txt"
 $logPath = Join-Path ([System.IO.Path]::GetTempPath()) ("snap-pocket-cloudflared-{0}.log" -f $PID)
 $tunnelProcess = $null
+$httpClient = $null
+$lanFallbackSaved = $false
 $scriptExitCode = 0
 
 try {
     # Prevent the app from reusing an expired quick-tunnel address.
-    Remove-Item -LiteralPath $tunnelUrlPath -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $tunnelUrlPath) {
+        Remove-Item -LiteralPath $tunnelUrlPath -Force
+    }
     Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
+
+    Add-Type -AssemblyName System.Net.Http
+    $httpHandler = New-Object System.Net.Http.HttpClientHandler
+    $httpHandler.AllowAutoRedirect = $false
+    $httpClient = New-Object System.Net.Http.HttpClient ($httpHandler)
 
     $arguments = @(
         "tunnel"
@@ -77,56 +153,100 @@ try {
 
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     $tunnelUrl = $null
+    $tunnelReady = $false
+    $startupFailure = $null
 
     while ([DateTime]::UtcNow -lt $deadline) {
+        $tunnelProcess.Refresh()
         if ($tunnelProcess.HasExited) {
             $logText = if (Test-Path -LiteralPath $logPath) {
                 Get-Content -LiteralPath $logPath -Raw -ErrorAction SilentlyContinue
             } else {
                 ""
             }
-            throw "cloudflared exited before issuing a tunnel URL. $logText"
+            $startupFailure = "cloudflared exited before the tunnel was ready. $logText"
+            break
         }
 
-        if (Test-Path -LiteralPath $logPath) {
+        if (-not $tunnelUrl -and (Test-Path -LiteralPath $logPath)) {
             $logText = Get-Content -LiteralPath $logPath -Raw -ErrorAction SilentlyContinue
             if ($logText) {
                 $match = [regex]::Match($logText, "https://[a-z0-9-]+\.trycloudflare\.com", "IgnoreCase")
                 if ($match.Success) {
                     $tunnelUrl = $match.Value
-                    break
                 }
             }
         }
 
-        Start-Sleep -Milliseconds 250
+        $remainingMilliseconds = [Math]::Floor(($deadline - [DateTime]::UtcNow).TotalMilliseconds)
+        if ($tunnelUrl -and $remainingMilliseconds -gt 0) {
+            $requestTimeout = [int][Math]::Min(2000, $remainingMilliseconds)
+            if (Test-PageResponse -Url "$tunnelUrl/main_page" -TimeoutMilliseconds $requestTimeout) {
+                $tunnelProcess.Refresh()
+                $tunnelReady = -not $tunnelProcess.HasExited
+                break
+            }
+        }
+
+        $remainingMilliseconds = [Math]::Floor(($deadline - [DateTime]::UtcNow).TotalMilliseconds)
+        if ($remainingMilliseconds -gt 0) {
+            Start-Sleep -Milliseconds ([int][Math]::Min(250, $remainingMilliseconds))
+        }
     }
 
-    if (-not $tunnelUrl) {
-        throw "Timed out after $TimeoutSeconds seconds while waiting for a Cloudflare quick-tunnel URL."
-    }
+    if (-not $tunnelReady) {
+        if (-not $startupFailure) {
+            $startupFailure = "Timed out after $TimeoutSeconds seconds while waiting for a Cloudflare quick-tunnel URL and HTTP 200 from /main_page."
+        }
+        Write-Host ("Cloudflare startup connection failed: {0}" -f $startupFailure) -ForegroundColor Yellow
 
-    # app.py currently reads this file as UTF-16.
-    Set-Content -LiteralPath $tunnelUrlPath -Value $tunnelUrl -Encoding Unicode -NoNewline
-    Write-Host "`nCloudflare Tunnel URL saved: $tunnelUrl"
-    Write-Host "Press Ctrl+C to stop the tunnel.`n"
+        if (-not $tunnelProcess.HasExited) {
+            Stop-Process -InputObject $tunnelProcess -Force
+            if (-not $tunnelProcess.WaitForExit(5000)) {
+                throw "Could not stop the failed Cloudflare tunnel process."
+            }
+        }
 
-    Wait-Process -Id $tunnelProcess.Id
-    $tunnelProcess.Refresh()
-    if ($tunnelProcess.ExitCode -ne 0) {
-        throw "cloudflared exited with code $($tunnelProcess.ExitCode)."
+        # Flask binds to IPv4; keep this bounded check independent of localhost resolution.
+        if (-not (Test-PageResponse -Url "http://127.0.0.1:5000/main_page")) {
+            throw "Local Flask /main_page did not return HTTP 200. LAN fallback was not saved."
+        }
+        $lanBaseUrl = Get-LanBaseUrl
+        Save-AccessUrl -Url $lanBaseUrl -Path $tunnelUrlPath
+        $lanFallbackSaved = $true
+        Write-Host "`nAccess mode: LAN fallback (Celery and Flask remain running)."
+        Write-Host "Base URL saved to tunnel_url.txt: $lanBaseUrl"
+        Write-Host "Camera page: $lanBaseUrl/main_page"
+        Write-Host "Restart run.bat to try Cloudflare again.`n"
+    } else {
+        Save-AccessUrl -Url $tunnelUrl -Path $tunnelUrlPath
+        Write-Host "`nAccess mode: Cloudflare Tunnel"
+        Write-Host "Cloudflare Tunnel URL saved: $tunnelUrl"
+        Write-Host "Camera page: $tunnelUrl/main_page"
+        Write-Host "Press Ctrl+C to stop the tunnel.`n"
+
+        Wait-Process -Id $tunnelProcess.Id
+        $tunnelProcess.Refresh()
+        if ($tunnelProcess.ExitCode -ne 0) {
+            throw "cloudflared exited with code $($tunnelProcess.ExitCode)."
+        }
     }
 } catch {
-    Write-Host ("Cloudflare tunnel failed: {0}" -f $_.Exception.Message) -ForegroundColor Red
+    Write-Host ("Tunnel startup or operation failed: {0}" -f $_.Exception.Message) -ForegroundColor Red
     $scriptExitCode = 1
 } finally {
     if ($null -ne $tunnelProcess -and -not $tunnelProcess.HasExited) {
         Stop-Process -Id $tunnelProcess.Id -Force -ErrorAction SilentlyContinue
     }
 
-    # A stopped tunnel must not leave an expired address behind.
-    Remove-Item -LiteralPath $tunnelUrlPath -Force -ErrorAction SilentlyContinue
+    # Expired public addresses are removed; a successful LAN fallback remains usable.
+    if (-not $lanFallbackSaved) {
+        Remove-Item -LiteralPath $tunnelUrlPath -Force -ErrorAction SilentlyContinue
+    }
     Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
+    if ($null -ne $httpClient) {
+        $httpClient.Dispose()
+    }
 }
 
 exit $scriptExitCode

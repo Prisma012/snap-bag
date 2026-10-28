@@ -120,7 +120,7 @@ snap-pocket/
 ├── run.bat                # Automated startup script
 ├── start_tunnel.ps1       # Quick Tunnel URL discovery and cleanup
 ├── requirements.txt       # Python dependencies
-└── tunnel_url.txt         # Runtime-only Cloudflare Quick Tunnel URL
+└── tunnel_url.txt         # Runtime-only Cloudflare or LAN fallback base URL
 ```
 ---
 
@@ -277,7 +277,7 @@ To use another location, set `SNAP_POCKET_CLOUDFLARED` to the executable's full 
 powershell -NoProfile -ExecutionPolicy Bypass -File .\start_tunnel.ps1 -CheckOnly
 ```
 
-The helper waits for the Quick Tunnel URL instead of relying on a fixed delay.
+The helper waits for the Quick Tunnel URL and checks its camera page instead of relying on a fixed delay. A missing executable or failed version check still stops startup before Celery or Flask is launched.
 
 The local application is available at:
 
@@ -285,11 +285,17 @@ The local application is available at:
 http://127.0.0.1:5000/main_page
 ```
 
-### 10. Use the automatically managed Cloudflare Tunnel URL
+### 10. Use the automatically managed access URL
 
-No manual copy-and-paste step is required. `start_tunnel.ps1` removes any stale address, starts a Quick Tunnel for `http://localhost:5000`, waits up to 30 seconds for a `trycloudflare.com` URL, and saves it to `tunnel_url.txt` in the UTF-16 format expected by `app.py`.
+No manual copy-and-paste step is required. `start_tunnel.ps1` removes any stale address and starts a Quick Tunnel for `http://localhost:5000`. Within a shared 30-second startup limit, it waits for a `trycloudflare.com` URL and an HTTP 200 response from that URL's `/main_page`. Each HTTP check takes at most two seconds and is capped by the remaining startup time. Once confirmed, the helper atomically saves the base URL to `tunnel_url.txt` in the UTF-16 format expected by `app.py`.
 
-The temporary address changes each time the services restart. Keep the tunnel console open while SnapPocket is running. When the tunnel stops, the helper removes `tunnel_url.txt` so the application cannot reuse an expired address.
+If Cloudflare cannot issue an address, exits before becoming ready, or the public camera page remains unreachable within that limit, the helper stops its tunnel process and tries LAN fallback. It first checks that the local Flask camera page responds, then detects the host IPv4 using the same network route as `app.py`. It saves `http://<host-ipv4-address>:5000` to the same `tunnel_url.txt` file, without `/main_page`. The existing download links and QR codes therefore use the LAN base URL automatically. Celery and Flask remain running, and the launcher reports a successful LAN fallback.
+
+The console prints the selected mode, saved base URL, and full camera-page URL. LAN access requires clients to reach the host on the same network; the existing HTTP camera-access requirements below still apply. Executable discovery, version-check or process-launch failures, an unavailable local Flask page, and failed LAN IP detection remain errors rather than successful fallbacks.
+
+The temporary Cloudflare address changes each time the services restart. Keep the tunnel console open in Cloudflare mode. When an established tunnel stops, the helper removes `tunnel_url.txt` so the application cannot reuse an expired public address. A successfully saved LAN fallback address is kept after the helper exits and refreshed on the next startup.
+
+Fallback is decided only during startup. There is no ongoing outage monitoring or automatic switch back to Cloudflare; restart `run.bat` to try Cloudflare again after a LAN fallback.
 
 Pages opened through an older Quick Tunnel address cannot discover a replacement address after the tunnel restarts. Keep the same tunnel process running for the full event session, or use a named Cloudflare Tunnel when a stable origin is required.
 

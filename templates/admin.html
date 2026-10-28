@@ -2189,11 +2189,11 @@
 
             const separator = String(url).includes('?') ? '&' : '?';
             const imageVersion = isRaw
-                ? item.timestamp
+                ? item.raw_version ?? item.timestamp
                 : item.result_version ?? item.timestamp;
             const imageSrc = `${url}${separator}cache=${encodeURIComponent(imageVersion)}`;
             return `
-                <button class="img-box image-open-button" type="button" data-image-src="${escapeHTML(imageSrc)}" data-image-label="${escapeHTML(label)}">
+                <button class="img-box image-open-button" type="button" data-image-type="${type}" data-image-src="${escapeHTML(imageSrc)}" data-image-label="${escapeHTML(label)}">
                     <div class="img-title">${escapeHTML(label)}</div>
                     <img src="${escapeHTML(imageSrc)}" alt="${escapeHTML(label)}">
                 </button>
@@ -2230,6 +2230,7 @@
             return JSON.stringify([
                 item.status,
                 item.raw_url,
+                item.raw_version,
                 item.result_url,
                 item.result_kind,
                 item.result_version,
@@ -2294,9 +2295,17 @@
                 if (!el) {
                     el = createItemElement(item, index);
                 } else if (el.dataset.itemSignature !== signature) {
+                    const activeImageType = imageModal.classList.contains('is-visible') && el.contains(lastImageTrigger)
+                        ? lastImageTrigger.dataset.imageType
+                        : null;
                     const updatedEl = createItemElement(item, index, false);
                     el.replaceWith(updatedEl);
                     el = updatedEl;
+                    if (activeImageType) {
+                        const updatedTrigger = el.querySelector(`[data-image-type="${activeImageType}"]`);
+                        if (updatedTrigger) openImageModal(updatedTrigger);
+                        else closeImageModal();
+                    }
                 }
 
                 const elementAtIndex = container.children[index];
